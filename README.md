@@ -40,7 +40,28 @@ El conjunto de datos utilizado proviene de la plataforma Kaggle (aporte de Marti
 | 18  | `yield_on_mortgage_credit_bonds%`              | Tasa de bonos hipotecarios a 30 años (sin spread)                                                   | —                                        |
 
 ---
+## 3. Anàlisis de datos
 
+
+
+### Análisis exploratorio de los datos (EDA).  
+
+Se debe incluir la descripción  de 
+las  tareas  de  inspección,  preprocesamiento,  análisis  univariado,  bivariado  y 
+visualización de los datos.  
+  
+## Modelización.  Comprende  la  aplicación  de  los  algoritmos  de  aprendizaje 
+supervisado sobre la plataforma de Big Data llamada H2O y los compara.  
+  
+ Resultados. Comunicar los principales resultados obtenidos (uso de métricas 
+y tablas comparativas).  
+  
+ Conclusiones. En un párrafo redactar las conclusiones del trabajo, 
+especificando la técnica utilizada, los resultados obtenidos (positivos o no).  
+  
+ Recomendaciones. Redactar los trabajos futuros.  
+  
+ Referencias bibliográficas 
 
 ### Referencias Bibliográficas
 
