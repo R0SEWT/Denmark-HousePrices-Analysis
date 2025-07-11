@@ -1,4 +1,6 @@
-# Documentación del Módulo de Análisis Refactorizado
+# Documentación del Módulo de Análisis
+
+Docuemntacion automatica del modulo de analysis (refactorizado desde utils spaguetti)
 
 ## Estructura del Proyecto
 
