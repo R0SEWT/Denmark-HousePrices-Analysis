@@ -44,3 +44,14 @@ TFBigData/
 └── run_all.sh                 ← Script para correr todos los notebooks (opcional)
 
 ```
+
+## Milestones
+
+| Milestone                        | Objetivo principal                             | Notebooks relacionados        |
+| -------------------------------- | ---------------------------------------------- | ----------------------------- |
+| `EDA completo`                   | Datos limpios y exploración básica + gráfica   | `00`, `01`, `02`              |
+| `Dataset listo para modelar`     | Variables transformadas y seleccionadas        | `03`                          |
+| `Modelos entrenados`             | GLM + GBM entrenados y evaluados               | `04`                          |
+| `Interpretabilidad y resultados` | SHAP, LIME, visuales y tabla comparativa final | `05`                          |
+| `Informe final`                  | Conclusiones, recomendaciones y referencias    | `README`, todos los notebooks |
+
