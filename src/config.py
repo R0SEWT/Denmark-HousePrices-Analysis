@@ -34,3 +34,12 @@ LEARNING_RATE = 0.1
 # === Flags de control ===
 DEBUG = False
 USE_GPU = True
+
+ISDISTRIBUTED = True  # distribuir el h2o
+
+DISTRIBUTED_DIR = Path("/mnt/sambashare/BigData-DATA/data")
+DATA_DISTRIBUTED_PATH = DISTRIBUTED_DIR / "DKHousingPrices.parquet"
+DISTRIBUTED_DATA_FILE = DISTRIBUTED_DIR / "DKHousingPrices.parquet"
+DISTRIBUTED_SAMPLE_FILE = DISTRIBUTED_DIR / "DKHousingPricesSample100k.csv"
+DISTRIBUTED_CLEAN_FILE = DISTRIBUTED_DIR / "processed" / "cleaned_data.parquet"
+DISTRIBUTED_NULL_FILE = DISTRIBUTED_DIR / "anomalias" / "df_nulls.csv"
