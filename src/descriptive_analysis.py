@@ -12,15 +12,17 @@ import h2o
 from datetime import datetime
 from scipy import stats
 from IPython.display import display
+from scipy.stats import f_oneway
+
 import warnings
-warnings.filterwarnings('ignore')
+warnings.filterwarnings('ignore') # jejeje
 
 
 # =============================================================================
 # FUNCIONES DE UTILIDAD Y CONFIGURACIÓN
 # =============================================================================
 
-def load_and_validate_data(data_path, destination_frame='df_clean'):
+def load_and_validate_data(data_path, destination_frame='df_clean', parallel=False):
     """
     Cargar y validar datos del análisis exploratorio usando H2O.
     
@@ -37,8 +39,14 @@ def load_and_validate_data(data_path, destination_frame='df_clean'):
         DataFrame con los datos cargados y validados
     """
     try:
-        h2o.init()
-        h2o.connect()
+        if parallel:
+            try:
+                h2o.init(ip="172.25.148.189", port=54323)
+            except:
+                h2o.connect(ip="172.25.197.59", port=54323)
+        else:
+            h2o.init()
+        
         print(f"Importando datos desde {data_path}\n")
 
         df_h2o = h2o.import_file(
@@ -659,837 +667,6 @@ def print_volume_insights(volume_stats, correlation):
 # ANÁLISIS TEMPORAL
 # =============================================================================
 
-def analyze_temporal_trends(df):
-    """
-    Análisis de tendencias temporales de precios.
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        DataFrame con los datos de transacciones
-        
-    Returns:
-    --------
-    pd.DataFrame
-        DataFrame con estadísticas anuales
-    """
-    # Crear columnas de fecha
-    df['year'] = pd.to_datetime(df['date']).dt.year
-    df['month'] = pd.to_datetime(df['date']).dt.month
-    
-    # Estadísticas anuales
-    yearly_stats = df.groupby('year').agg({
-        'purchase_price': ['count', 'mean', 'median', 'std'],
-        'sqm_price': ['mean', 'median']
-    }).round(0)
-    
-    yearly_stats.columns = ['Transacciones', 'Precio_Promedio', 'Precio_Mediana', 'Precio_Std',
-                           'Precio_m2_Promedio', 'Precio_m2_Mediana']
-    
-    # Calcular tasas de crecimiento anual
-    yearly_stats['Crecimiento_Precio'] = yearly_stats['Precio_Promedio'].pct_change() * 100
-    yearly_stats['Crecimiento_m2'] = yearly_stats['Precio_m2_Promedio'].pct_change() * 100
-    
-    return yearly_stats
-
-
-def create_temporal_plots(yearly_stats, figsize=(16, 10)):
-    """
-    Crear visualizaciones de tendencias temporales.
-    
-    Parameters:
-    -----------
-    yearly_stats : pd.DataFrame
-        Estadísticas anuales
-    figsize : tuple
-        Tamaño de la figura
-    """
-    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=figsize)
-    fig.suptitle('Evolución Temporal del Mercado Inmobiliario Danés', fontsize=16, fontweight='bold')
-    
-    years = yearly_stats.index
-    
-    # 1. Evolución de precios promedio
-    ax1.plot(years, yearly_stats['Precio_Promedio'], marker='o', linewidth=2, markersize=4)
-    ax1.set_title('Evolución del Precio Promedio')
-    ax1.set_xlabel('Año')
-    ax1.set_ylabel('Precio Promedio (DKK)')
-    ax1.grid(True, alpha=0.3)
-    ax1.tick_params(axis='x', rotation=45)
-    
-    # 2. Evolución de precio por m²
-    ax2.plot(years, yearly_stats['Precio_m2_Promedio'], marker='s', linewidth=2, 
-             markersize=4, color='orange')
-    ax2.set_title('Evolución del Precio por m²')
-    ax2.set_xlabel('Año')
-    ax2.set_ylabel('Precio por m² (DKK)')
-    ax2.grid(True, alpha=0.3)
-    ax2.tick_params(axis='x', rotation=45)
-    
-    # 3. Volumen de transacciones
-    ax3.bar(years, yearly_stats['Transacciones'], alpha=0.7, color='green')
-    ax3.set_title('Volumen de Transacciones por Año')
-    ax3.set_xlabel('Año')
-    ax3.set_ylabel('Número de Transacciones')
-    ax3.grid(True, alpha=0.3)
-    ax3.tick_params(axis='x', rotation=45)
-    
-    # 4. Tasas de crecimiento
-    ax4.plot(years[1:], yearly_stats['Crecimiento_Precio'].dropna(), marker='o', 
-             linewidth=2, label='Precio Total', alpha=0.8)
-    ax4.plot(years[1:], yearly_stats['Crecimiento_m2'].dropna(), marker='s', 
-             linewidth=2, label='Precio/m²', alpha=0.8)
-    ax4.axhline(y=0, color='red', linestyle='--', alpha=0.7)
-    ax4.set_title('Tasas de Crecimiento Anual')
-    ax4.set_xlabel('Año')
-    ax4.set_ylabel('Crecimiento (%)')
-    ax4.legend()
-    ax4.grid(True, alpha=0.3)
-    ax4.tick_params(axis='x', rotation=45)
-    
-    plt.tight_layout()
-    plt.show()
-
-
-def print_temporal_insights(yearly_stats):
-    """
-    Imprimir insights del análisis temporal.
-    
-    Parameters:
-    -----------
-    yearly_stats : pd.DataFrame
-        Estadísticas anuales
-    """
-    print("INSIGHTS TEMPORALES")
-    print("=" * 25)
-    
-    # Períodos de mayor crecimiento
-    max_growth_year = yearly_stats['Crecimiento_Precio'].idxmax()
-    max_growth_rate = yearly_stats['Crecimiento_Precio'].max()
-    
-    # Períodos de mayor declive
-    min_growth_year = yearly_stats['Crecimiento_Precio'].idxmin()
-    min_growth_rate = yearly_stats['Crecimiento_Precio'].min()
-    
-    print(f"Mayor crecimiento: {max_growth_year} ({max_growth_rate:.1f}%)")
-    print(f"Mayor declive: {min_growth_year} ({min_growth_rate:.1f}%)")
-    print(f"Crecimiento promedio anual: {yearly_stats['Crecimiento_Precio'].mean():.1f}%")
-    print(f"Período analizado: {yearly_stats.index.min()} - {yearly_stats.index.max()}")
-
-
-# =============================================================================
-# FUNCIÓN PRINCIPAL DE ANÁLISIS COMPLETO
-# =============================================================================
-
-def run_complete_descriptive_analysis(df, target='purchase_price', include_visualizations=True):
-    """
-    Función principal para ejecutar análisis descriptivo completo.
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        DataFrame con los datos de transacciones inmobiliarias
-    target : str
-        Columna objetivo (precio)
-    include_visualizations : bool
-        Si incluir visualizaciones
-        
-    Returns:
-    --------
-    dict
-        Diccionario con todos los resultados del análisis
-    """
-    print("=" * 60)
-    print("ANÁLISIS DESCRIPTIVO COMPLETO - MERCADO INMOBILIARIO DANÉS")
-    print("=" * 60)
-    
-    # Configurar estilo de plots
-    configure_plot_style()
-    
-    all_results = {}
-    
-    # 1. Análisis Regional
-    print("\n1. ANÁLISIS REGIONAL")
-    print("=" * 20)
-    
-    regional_stats = analyze_regional_prices(df, target)
-    top_regions = print_regional_summary(regional_stats)
-    cv_data = create_regional_price_plots(regional_stats, df)
-    print_regional_insights(regional_stats, cv_data)
-    
-    all_results['regional_stats'] = regional_stats
-    all_results['cv_data'] = cv_data
-    
-    # 2. Análisis de Precio por m²
-    print("\n\n2. ANÁLISIS DE PRECIO POR M²")
-    print("=" * 30)
-    
-    sqm_stats, premium_threshold = analyze_sqm_prices(df)
-    comparison_df = create_ranking_comparison(regional_stats, sqm_stats)
-    create_sqm_price_plots(df, sqm_stats, premium_threshold, comparison_df)
-    print_sqm_insights(sqm_stats, comparison_df)
-    
-    all_results['sqm_stats'] = sqm_stats
-    all_results['premium_threshold'] = premium_threshold
-    all_results['comparison_df'] = comparison_df
-    
-    # 3. Análisis de Volumen
-    print("\n\n3. ANÁLISIS DE VOLUMEN DE TRANSACCIONES")
-    print("=" * 40)
-    
-    volume_stats, correlation, high_liquidity_threshold = analyze_transaction_volume(df, target)
-    print_volume_summary(volume_stats, correlation, high_liquidity_threshold)
-    create_volume_plots(volume_stats, correlation, high_liquidity_threshold)
-    print_volume_insights(volume_stats, correlation)
-    
-    all_results['volume_stats'] = volume_stats
-    all_results['correlation'] = correlation
-    all_results['high_liquidity_threshold'] = high_liquidity_threshold
-    
-    # 4. Análisis Temporal (si está disponible)
-    yearly_stats = None
-    if 'date' in df.columns:
-        print("\n\n4. ANÁLISIS TEMPORAL")
-        print("=" * 20)
-        
-        yearly_stats = analyze_temporal_trends(df, target)
-        create_temporal_plots(yearly_stats)
-        print_temporal_insights(yearly_stats)
-        all_results['yearly_stats'] = yearly_stats
-    
-    # 5. Análisis por Tipo de Propiedad
-    print("\n\n5. ANÁLISIS POR TIPO DE PROPIEDAD")
-    print("=" * 35)
-    
-    property_analysis = analyze_property_types(df, target)
-    price_stats_formatted = format_property_type_stats(property_analysis[0])
-    print_property_type_distribution(property_analysis[2])
-    
-    if include_visualizations:
-        create_property_type_plots(df, target)
-    
-    property_significance = analyze_property_type_significance(df, target)
-    
-    all_results['property_analysis'] = property_analysis
-    all_results['property_significance'] = property_significance
-    
-    # 6. Análisis de Comportamiento de Mercado
-    print("\n\n6. ANÁLISIS DEL COMPORTAMIENTO DE MERCADO")
-    print("=" * 45)
-    
-    market_behavior = analyze_market_behavior(df, target)
-    if include_visualizations:
-        create_market_behavior_plots(df, market_behavior, target)
-    
-    seasonal_patterns = analyze_seasonal_patterns(df, target)
-    
-    all_results['market_behavior'] = market_behavior
-    all_results['seasonal_patterns'] = seasonal_patterns
-    
-    # 7. Segmentación de Mercado
-    print("\n\n7. SEGMENTACIÓN DE MERCADO")
-    print("=" * 30)
-    
-    market_segmentation = analyze_market_segmentation(df, target)
-    if include_visualizations:
-        create_market_segmentation_plots(df, market_segmentation, target)
-        create_niche_analysis_plots(df, market_segmentation.get('niche_analysis', {}), target)
-    
-    print_segmentation_insights(market_segmentation, df)
-    
-    all_results['market_segmentation'] = market_segmentation
-    
-    # Resumen ejecutivo
-    print("\n\n" + "=" * 60)
-    print("RESUMEN EJECUTIVO")
-    print("=" * 60)
-    
-    print(f"Dataset analizado: {len(df):,} transacciones")
-    print(f"Regiones analizadas: {df['region'].nunique()}")
-    print(f"Precio promedio nacional: {df[target].mean():,.0f} DKK")
-    print(f"Precio/m² promedio nacional: {df['sqm_price'].mean():,.0f} DKK/m²")
-    
-    return all_results
-    print(f"Región más cara: {regional_stats.index[0]}")
-    print(f"Región con mayor volumen: {volume_stats.index[0]}")
-    
-    return {
-        'regional_stats': regional_stats,
-        'sqm_stats': sqm_stats,
-        'volume_stats': volume_stats,
-        'yearly_stats': yearly_stats,
-        'comparison_df': comparison_df,
-        'premium_threshold': premium_threshold,
-        'correlation': correlation,
-        'high_liquidity_threshold': high_liquidity_threshold,
-        'cv_data': cv_data
-    }
-
-
-# =============================================================================
-# FUNCIONES AUXILIARES PARA EXPORTACIÓN DE RESULTADOS
-# =============================================================================
-
-def export_results_to_csv(results, output_dir='results/tablas/'):
-    """
-    Exportar resultados del análisis a archivos CSV.
-    
-    Parameters:
-    -----------
-    results : dict
-        Diccionario con resultados del análisis
-    output_dir : str
-        Directorio de salida para los archivos
-    """
-    import os
-    
-    # Crear directorio si no existe
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # Exportar cada resultado
-    for key, value in results.items():
-        if isinstance(value, pd.DataFrame) and value is not None:
-            filename = f"{output_dir}descriptive_analysis_{key}.csv"
-            value.to_csv(filename)
-            print(f"Exportado: {filename}")
-
-
-def generate_summary_report(results):
-    """
-    Generar reporte resumen del análisis descriptivo.
-    
-    Parameters:
-    -----------
-    results : dict
-        Diccionario con resultados del análisis
-        
-    Returns:
-    --------
-    str
-        Reporte en formato texto
-    """
-    report = []
-    report.append("=" * 80)
-    report.append("REPORTE RESUMEN - ANÁLISIS DESCRIPTIVO")
-    report.append("=" * 80)
-    
-    if 'regional_stats' in results:
-        regional = results['regional_stats']
-        report.append(f"\n1. ANÁLISIS REGIONAL:")
-        report.append(f"   • Total regiones: {len(regional)}")
-        report.append(f"   • Región más cara: {regional.index[0]}")
-        report.append(f"   • Precio promedio máximo: {regional.iloc[0]['Promedio']:,.0f} DKK")
-    
-    if 'sqm_stats' in results:
-        sqm = results['sqm_stats']
-        report.append(f"\n2. ANÁLISIS PRECIO/M²:")
-        report.append(f"   • Región más eficiente: {sqm.index[0]}")
-        report.append(f"   • Precio/m² máximo: {sqm.iloc[0]['Promedio_m2']:,.0f} DKK/m²")
-        report.append(f"   • Regiones premium: {sqm['Es_Premium'].sum()}")
-    
-    if 'volume_stats' in results:
-        volume = results['volume_stats']
-        report.append(f"\n3. ANÁLISIS VOLUMEN:")
-        report.append(f"   • Región líder: {volume.index[0]}")
-        report.append(f"   • Total transacciones: {volume['Num_Transacciones'].sum():,}")
-        report.append(f"   • Concentración top 10: {volume.head(10)['Participacion_Mercado'].sum():.1f}%")
-    
-    return "\n".join(report)
-
-# =============================================================================
-# ANÁLISIS POR TIPO DE PROPIEDAD (SECCIÓN 3)
-# =============================================================================
-
-def analyze_property_types(df, target='purchase_price'):
-    """
-    Analizar diferencias por tipo de propiedad.
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        DataFrame con los datos
-    target : str
-        Columna objetivo (precio)
-        
-    Returns:
-    --------
-    tuple
-        (price_stats_by_type, physical_stats_by_type, regional_dist_by_type)
-    """
-    print("🏠 ANÁLISIS POR TIPO DE PROPIEDAD")
-    print("=" * 50)
-    
-    # 3.1 Estadísticas básicas por tipo
-    print("\n📊 3.1 Estadísticas de precios por tipo de propiedad:")
-    price_stats_by_type = df.groupby('house_type')[target].agg([
-        'count', 'mean', 'median', 'std', 'min', 'max'
-    ]).round(0)
-    price_stats_by_type['cv'] = (price_stats_by_type['std'] / price_stats_by_type['mean'] * 100).round(2)
-    price_stats_by_type = price_stats_by_type.sort_values('median', ascending=False)
-    
-    # 3.2 Características físicas por tipo
-    print("\n🏗️ 3.2 Características físicas por tipo:")
-    physical_stats_by_type = df.groupby('house_type').agg({
-        'sqm': ['mean', 'median', 'std'],
-        'no_rooms': ['mean', 'median', 'std'],
-        'sqm_price': ['mean', 'median', 'std']
-    }).round(2)
-    
-    # Aplanar columnas multinivel
-    physical_stats_by_type.columns = ['_'.join(col).strip() for col in physical_stats_by_type.columns]
-    
-    # 3.3 Distribución regional por tipo
-    print("\n🌍 3.3 Distribución regional por tipo de propiedad:")
-    regional_dist_by_type = pd.crosstab(df['region'], df['house_type'], normalize='columns') * 100
-    regional_dist_by_type = regional_dist_by_type.round(1)
-    
-    return price_stats_by_type, physical_stats_by_type, regional_dist_by_type
-
-
-def format_property_type_stats(price_stats_by_type):
-    """
-    Formatear estadísticas de tipo de propiedad para mostrar.
-    
-    Parameters:
-    -----------
-    price_stats_by_type : pd.DataFrame
-        Estadísticas de precios por tipo
-        
-    Returns:
-    --------
-    pd.DataFrame
-        Estadísticas formateadas
-    """
-    price_stats_formatted = price_stats_by_type.copy()
-    for col in ['count', 'mean', 'median', 'std', 'min', 'max']:
-        if col == 'count':
-            price_stats_formatted[col] = price_stats_formatted[col].apply(lambda x: f"{x:,.0f}")
-        else:
-            price_stats_formatted[col] = price_stats_formatted[col].apply(lambda x: f"{x:,.0f} DKK")
-    price_stats_formatted['cv'] = price_stats_formatted['cv'].apply(lambda x: f"{x:.1f}%")
-    
-    return price_stats_formatted
-
-
-def print_property_type_distribution(regional_dist_by_type):
-    """
-    Imprimir distribución regional por tipo de propiedad.
-    
-    Parameters:
-    -----------
-    regional_dist_by_type : pd.DataFrame
-        Distribución regional por tipo
-    """
-    print("🔝 Top 3 regiones por concentración de cada tipo:")
-    for house_type in regional_dist_by_type.columns:
-        top_regions_for_type = regional_dist_by_type[house_type].nlargest(3)
-        print(f"\n{house_type}:")
-        for region, pct in top_regions_for_type.items():
-            print(f"  • {region}: {pct:.1f}%")
-
-
-def create_property_type_plots(df, target='purchase_price'):
-    """
-    Crear visualizaciones por tipo de propiedad.
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        DataFrame con los datos
-    target : str
-        Columna objetivo (precio)
-    """
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    fig.suptitle('Análisis por Tipo de Propiedad', fontsize=16, fontweight='bold', y=0.98)
-
-    # 1. Boxplot de precios por tipo
-    sns.boxplot(data=df, x='house_type', y=target, ax=axes[0,0])
-    axes[0,0].set_title('Distribución de Precios por Tipo de Propiedad')
-    axes[0,0].set_xlabel('Tipo de Propiedad')
-    axes[0,0].set_ylabel('Precio (DKK)')
-    axes[0,0].tick_params(axis='x', rotation=45)
-    axes[0,0].set_ylim(0, 10000000)  # Limitar para mejor visualización
-
-    # 2. Precio por m² por tipo
-    sns.boxplot(data=df, x='house_type', y='sqm_price', ax=axes[0,1])
-    axes[0,1].set_title('Precio por m² por Tipo de Propiedad')
-    axes[0,1].set_xlabel('Tipo de Propiedad')
-    axes[0,1].set_ylabel('Precio por m² (DKK)')
-    axes[0,1].tick_params(axis='x', rotation=45)
-    axes[0,1].set_ylim(0, 80000)  # Limitar para mejor visualización
-
-    # 3. Tamaño promedio por tipo
-    avg_size_by_type = df.groupby('house_type')['sqm'].mean().sort_values(ascending=True)
-    avg_size_by_type.plot(kind='barh', ax=axes[1,0], color='lightcoral')
-    axes[1,0].set_title('Tamaño Promedio por Tipo de Propiedad')
-    axes[1,0].set_xlabel('Superficie (m²)')
-
-    # 4. Volumen de transacciones por tipo
-    transaction_volume_by_type = df['house_type'].value_counts()
-    transaction_volume_by_type.plot(kind='pie', ax=axes[1,1], autopct='%1.1f%%')
-    axes[1,1].set_title('Volumen de Transacciones por Tipo')
-    axes[1,1].set_ylabel('')
-
-    plt.tight_layout()
-    plt.show()
-
-
-def analyze_property_type_significance(df, target='purchase_price'):
-    """
-    Analizar significancia estadística entre tipos de propiedad.
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        DataFrame con los datos
-    target : str
-        Columna objetivo (precio)
-        
-    Returns:
-    --------
-    dict
-        Resultados de tests estadísticos
-    """
-    from scipy.stats import f_oneway
-    
-    print("\n3.4 Tests de significancia estadística entre tipos de propiedad:")
-    
-    # ANOVA para comparar precios entre tipos
-    house_types = df['house_type'].unique()
-    price_groups = [df[df['house_type'] == ht][target] for ht in house_types]
-    f_stat, p_value = f_oneway(*price_groups)
-
-    print(f"ANOVA - Diferencias de precio entre tipos de propiedad:")
-    print(f"F-estadístico: {f_stat:.2f}")
-    print(f"p-valor: {p_value:.2e}")
-    print(f"Interpretación: {'Hay diferencias significativas' if p_value < 0.05 else 'No hay diferencias significativas'}")
-
-    # Correlación entre características físicas y precio por tipo
-    print("\n3.5 Correlaciones precio vs características por tipo:")
-    correlations = {}
-    for house_type in house_types:
-        subset = df[df['house_type'] == house_type]
-        corr_sqm = subset[target].corr(subset['sqm'])
-        corr_rooms = subset[target].corr(subset['no_rooms'])
-        correlations[house_type] = {
-            'size_correlation': corr_sqm,
-            'rooms_correlation': corr_rooms
-        }
-        print(f"{house_type}:")
-        print(f"  Correlación precio-tamaño: {corr_sqm:.3f}")
-        print(f"  Correlación precio-habitaciones: {corr_rooms:.3f}")
-    
-    return {
-        'anova_f_stat': f_stat,
-        'anova_p_value': p_value,
-        'correlations': correlations
-    }
-
-
-# =============================================================================
-# ANÁLISIS DEL COMPORTAMIENTO DE MERCADO (SECCIÓN 4)
-# =============================================================================
-
-def analyze_market_behavior(df, target='purchase_price'):
-    """
-    Analizar comportamiento del mercado inmobiliario.
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        DataFrame con los datos
-    target : str
-        Columna objetivo (precio)
-        
-    Returns:
-    --------
-    dict
-        Resultados del análisis de mercado
-    """
-    print("=== ANÁLISIS DEL COMPORTAMIENTO DE MERCADO ===")
-    
-    results = {}
-    
-    # 4.1 Verificar columnas disponibles
-    print("4.1 Columnas disponibles relacionadas con mercado:")
-    market_columns = [col for col in df.columns if any(keyword in col.lower() 
-                     for keyword in ['sales', 'type', 'change', 'offer', 'quarter'])]
-    print("Columnas encontradas:", market_columns)
-    results['available_columns'] = market_columns
-    
-    # 4.2 Análisis por sales_type si está disponible
-    if 'sales_type' in df.columns:
-        print("\n4.1 Análisis por tipo de venta (sales_type):")
-        sales_analysis = df.groupby('sales_type').agg({
-            target: ['count', 'mean', 'median', 'std'],
-            'sqm_price': ['mean', 'median']
-        }).round(0)
-        
-        # Aplanar columnas
-        sales_analysis.columns = ['_'.join(col) for col in sales_analysis.columns]
-        results['sales_analysis'] = sales_analysis
-    else:
-        print("\n4.1 sales_type no disponible en el dataset")
-        results['sales_analysis'] = None
-    
-    # 4.3 Análisis de cambio oferta-compra
-    change_col = None
-    for col in df.columns:
-        if 'change' in col.lower() and ('offer' in col.lower() or 'purchase' in col.lower()):
-            change_col = col
-            break
-    
-    if change_col:
-        print(f"\n4.2 Análisis de variación precio oferta vs compra ({change_col}):")
-        change_stats = df[change_col].describe()
-        results['change_analysis'] = {
-            'column': change_col,
-            'stats': change_stats,
-            'categories': analyze_price_change_categories(df, change_col)
-        }
-    else:
-        print("\n4.2 Columna de cambio oferta-compra no disponible")
-        results['change_analysis'] = None
-    
-    # 4.4 Análisis temporal
-    temporal_results = analyze_temporal_patterns(df, target)
-    results.update(temporal_results)
-    
-    return results
-
-
-def analyze_price_change_categories(df, change_col):
-    """
-    Categorizar cambios entre oferta y compra.
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        DataFrame con los datos
-    change_col : str
-        Columna de cambio de precio
-        
-    Returns:
-    --------
-    pd.Series
-        Distribución de categorías
-    """
-    df_temp = df.copy()
-    df_temp['change_category'] = pd.cut(
-        df_temp[change_col],
-        bins=[-float('inf'), -5, -1, 1, 5, float('inf')],
-        labels=['Descuento >5%', 'Descuento 1-5%', 'Sin cambio ±1%', 'Premium 1-5%', 'Premium >5%']
-    )
-    change_dist = df_temp['change_category'].value_counts()
-    
-    print(f"Distribución de cambios:")
-    for cat, count in change_dist.items():
-        pct = count / len(df_temp) * 100
-        print(f"  {cat}: {count:,} ({pct:.1f}%)")
-    
-    return change_dist
-
-
-def analyze_temporal_patterns(df, target='purchase_price'):
-    """
-    Analizar patrones temporales usando fecha.
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        DataFrame con los datos
-    target : str
-        Columna objetivo (precio)
-        
-    Returns:
-    --------
-    dict
-        Resultados del análisis temporal
-    """
-    results = {}
-    
-    if 'date' in df.columns:
-        print("\n4.4 Análisis estacional usando la fecha:")
-        
-        df_temp = df.copy()
-        # Crear variables temporales
-        df_temp['year'] = pd.to_datetime(df_temp['date']).dt.year
-        df_temp['month'] = pd.to_datetime(df_temp['date']).dt.month
-        df_temp['quarter_from_date'] = pd.to_datetime(df_temp['date']).dt.quarter
-        
-        # Análisis por trimestre
-        quarterly_from_date = df_temp.groupby('quarter_from_date').agg({
-            target: ['count', 'mean', 'median'],
-            'sqm_price': ['mean', 'median']
-        }).round(0)
-        quarterly_from_date.columns = ['_'.join(col) for col in quarterly_from_date.columns]
-        
-        # Análisis por mes
-        monthly_stats = df_temp.groupby('month')[target].agg(['count', 'mean', 'median']).round(0)
-        
-        results['quarterly_analysis'] = quarterly_from_date
-        results['monthly_analysis'] = monthly_stats
-        results['temporal_variables'] = ['year', 'month', 'quarter_from_date']
-        
-        print("Estadísticas por trimestre (derivado de fecha):")
-        # No mostrar aquí para evitar duplicación
-        
-    else:
-        print("\n4.4 Análisis temporal limitado - columna date no disponible")
-        results['quarterly_analysis'] = None
-        results['monthly_analysis'] = None
-    
-    return results
-
-
-def create_market_behavior_plots(df, results, target='purchase_price'):
-    """
-    Crear visualizaciones del comportamiento de mercado.
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        DataFrame con los datos
-    results : dict
-        Resultados del análisis de mercado
-    target : str
-        Columna objetivo (precio)
-    """
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    fig.suptitle('Análisis del Comportamiento de Mercado', fontsize=16, fontweight='bold', y=0.98)
-
-    # 1. Análisis por tipo de venta
-    if results['sales_analysis'] is not None:
-        # Filtrar tipos de venta con más de 1000 transacciones
-        major_sales_types = df['sales_type'].value_counts()
-        major_types = major_sales_types[major_sales_types > 1000].index
-        df_major_sales = df[df['sales_type'].isin(major_types)]
-        
-        sns.boxplot(data=df_major_sales, x='sales_type', y=target, ax=axes[0,0])
-        axes[0,0].set_title('Precios por Tipo de Venta')
-        axes[0,0].set_xlabel('Tipo de Venta')
-        axes[0,0].set_ylabel('Precio (DKK)')
-        axes[0,0].tick_params(axis='x', rotation=45)
-        axes[0,0].set_ylim(0, 8000000)
-    else:
-        axes[0,0].text(0.5, 0.5, 'Datos de sales_type\nno disponibles', 
-                      ha='center', va='center', transform=axes[0,0].transAxes)
-        axes[0,0].set_title('Tipo de Venta - No Disponible')
-
-    # 2. Distribución de cambios oferta vs compra
-    if results['change_analysis'] is not None:
-        change_col = results['change_analysis']['column']
-        change_filtered = df[change_col][(df[change_col] >= -25) & (df[change_col] <= 25)]
-        change_filtered.hist(bins=50, ax=axes[0,1], alpha=0.7, color='skyblue')
-        axes[0,1].axvline(0, color='red', linestyle='--', label='Sin cambio')
-        axes[0,1].axvline(change_filtered.mean(), color='orange', linestyle='--', 
-                         label=f'Media: {change_filtered.mean():.1f}%')
-        axes[0,1].set_title('Distribución de Cambios Oferta vs Compra')
-        axes[0,1].set_xlabel('% Cambio')
-        axes[0,1].set_ylabel('Frecuencia')
-        axes[0,1].legend()
-    else:
-        axes[0,1].text(0.5, 0.5, 'Datos de cambio\noferta-compra\nno disponibles', 
-                      ha='center', va='center', transform=axes[0,1].transAxes)
-        axes[0,1].set_title('Cambio Oferta-Compra - No Disponible')
-
-    # 3. Análisis por trimestre
-    if results['quarterly_analysis'] is not None and 'month' in df.columns:
-        df_temp = df.copy()
-        df_temp['quarter_from_date'] = pd.to_datetime(df_temp['date']).dt.quarter
-        quarterly_prices = df_temp.groupby('quarter_from_date')[target].median()
-        quarterly_prices.plot(kind='bar', ax=axes[1,0], color='lightgreen')
-        axes[1,0].set_title('Precio Mediano por Trimestre')
-        axes[1,0].set_xlabel('Trimestre')
-        axes[1,0].set_ylabel('Precio Mediano (DKK)')
-        axes[1,0].tick_params(axis='x', rotation=0)
-    else:
-        axes[1,0].text(0.5, 0.5, 'Datos de trimestre\nno disponibles', 
-                      ha='center', va='center', transform=axes[1,0].transAxes)
-        axes[1,0].set_title('Análisis Trimestral - No Disponible')
-
-    # 4. Volumen por trimestre
-    if results['quarterly_analysis'] is not None and 'month' in df.columns:
-        df_temp = df.copy()
-        df_temp['quarter_from_date'] = pd.to_datetime(df_temp['date']).dt.quarter
-        quarterly_volume = df_temp['quarter_from_date'].value_counts().sort_index()
-        quarterly_volume.plot(kind='bar', ax=axes[1,1], color='orange')
-        axes[1,1].set_title('Volumen de Transacciones por Trimestre')
-        axes[1,1].set_xlabel('Trimestre')
-        axes[1,1].set_ylabel('Número de Transacciones')
-        axes[1,1].tick_params(axis='x', rotation=0)
-    else:
-        axes[1,1].text(0.5, 0.5, 'Datos de trimestre\nno disponibles', 
-                      ha='center', va='center', transform=axes[1,1].transAxes)
-        axes[1,1].set_title('Volumen Trimestral - No Disponible')
-
-    plt.tight_layout()
-    plt.show()
-
-
-def print_volume_insights(volume_stats, correlation):
-    """
-    Imprimir insights del análisis de volumen.
-    
-    Parameters:
-    -----------
-    volume_stats : pd.DataFrame
-        Estadísticas de volumen
-    correlation : float
-        Correlación volumen-precio
-    """
-    print("\nINSIGHTS CLAVE - VOLUMEN DE TRANSACCIONES")
-    print("=" * 45)
-    print(f"Región líder: {volume_stats.index[0]} ({volume_stats.iloc[0]['Num_Transacciones']:,} trans.)")
-    print(f"Participación del líder: {volume_stats.iloc[0]['Participacion_Mercado']:.1f}%")
-    print(f"Mercados principales: {(volume_stats['Tipo_Mercado'] == 'Principal').sum()} regiones")
-    print(f"Concentración top 5: {volume_stats.head(5)['Participacion_Mercado'].sum():.1f}%")
-    print(f"Correlación volumen-precio: {'Positiva' if correlation > 0 else 'Negativa'} ({abs(correlation):.3f})")
-
-
-# =============================================================================
-# ANÁLISIS TEMPORAL
-# =============================================================================
-
-def analyze_temporal_trends(df):
-    """
-    Análisis de tendencias temporales de precios.
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        DataFrame con los datos de transacciones
-        
-    Returns:
-    --------
-    pd.DataFrame
-        DataFrame con estadísticas anuales
-    """
-    # Crear columnas de fecha
-    df['year'] = pd.to_datetime(df['date']).dt.year
-    df['month'] = pd.to_datetime(df['date']).dt.month
-    
-    # Estadísticas anuales
-    yearly_stats = df.groupby('year').agg({
-        'purchase_price': ['count', 'mean', 'median', 'std'],
-        'sqm_price': ['mean', 'median']
-    }).round(0)
-    
-    yearly_stats.columns = ['Transacciones', 'Precio_Promedio', 'Precio_Mediana', 'Precio_Std',
-                           'Precio_m2_Promedio', 'Precio_m2_Mediana']
-    
-    # Calcular tasas de crecimiento anual
-    yearly_stats['Crecimiento_Precio'] = yearly_stats['Precio_Promedio'].pct_change() * 100
-    yearly_stats['Crecimiento_m2'] = yearly_stats['Precio_m2_Promedio'].pct_change() * 100
-    
-    return yearly_stats
-
 
 def create_temporal_plots(yearly_stats, figsize=(16, 10)):
     """
@@ -1971,9 +1148,7 @@ def create_niche_analysis_plots(df, niche_analysis, target='purchase_price'):
         Análisis de mercados de nicho
     target : str
         Columna objetivo (precio)
-    """
-    import matplotlib.pyplot as plt
-    
+    """    
     print("\n5.5 Análisis visual de mercados de nicho:")
     fig, axes = plt.subplots(1, 2, figsize=(15, 5))
 
@@ -2059,3 +1234,773 @@ def print_segmentation_insights(segmentation_results, df):
                     print(f"- {niche_name}: {size_ratio:.1f}x el tamaño promedio, {price_ratio:.2f}x el precio mediano")
 
     print("="*60)
+
+
+# =============================================================================
+# FUNCIÓN PRINCIPAL DE ANÁLISIS COMPLETO
+# =============================================================================
+
+def run_complete_descriptive_analysis(df, target='purchase_price', include_visualizations=True):
+    """
+    Función principal para ejecutar análisis descriptivo completo.
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        DataFrame con los datos de transacciones inmobiliarias
+    target : str
+        Columna objetivo (precio)
+    include_visualizations : bool
+        Si incluir visualizaciones
+        
+    Returns:
+    --------
+    dict
+        Diccionario con todos los resultados del análisis
+    """
+    print("=" * 60)
+    print("ANÁLISIS DESCRIPTIVO COMPLETO - MERCADO INMOBILIARIO DANÉS")
+    print("=" * 60)
+    
+    # Configurar estilo de plots
+    configure_plot_style()
+    
+    all_results = {}
+    
+    # 1. Análisis Regional
+    print("\n1. ANÁLISIS REGIONAL")
+    print("=" * 20)
+    
+    regional_stats = analyze_regional_prices(df, target)
+    top_regions = print_regional_summary(regional_stats)
+    cv_data = create_regional_price_plots(regional_stats, df)
+    print_regional_insights(regional_stats, cv_data)
+    
+    all_results['regional_stats'] = regional_stats
+    all_results['cv_data'] = cv_data
+    
+    # 2. Análisis de Precio por m²
+    print("\n\n2. ANÁLISIS DE PRECIO POR M²")
+    print("=" * 30)
+    
+    sqm_stats, premium_threshold = analyze_sqm_prices(df)
+    comparison_df = create_ranking_comparison(regional_stats, sqm_stats)
+    create_sqm_price_plots(df, sqm_stats, premium_threshold, comparison_df)
+    print_sqm_insights(sqm_stats, comparison_df)
+    
+    all_results['sqm_stats'] = sqm_stats
+    all_results['premium_threshold'] = premium_threshold
+    all_results['comparison_df'] = comparison_df
+    
+    # 3. Análisis de Volumen
+    print("\n\n3. ANÁLISIS DE VOLUMEN DE TRANSACCIONES")
+    print("=" * 40)
+    
+    volume_stats, correlation, high_liquidity_threshold = analyze_transaction_volume(df, target)
+    print_volume_summary(volume_stats, correlation, high_liquidity_threshold)
+    create_volume_plots(volume_stats, correlation, high_liquidity_threshold)
+    print_volume_insights(volume_stats, correlation)
+    
+    all_results['volume_stats'] = volume_stats
+    all_results['correlation'] = correlation
+    all_results['high_liquidity_threshold'] = high_liquidity_threshold
+    
+    # 4. Análisis Temporal (si está disponible)
+    yearly_stats = None
+    if 'date' in df.columns:
+        print("\n\n4. ANÁLISIS TEMPORAL")
+        print("=" * 20)
+        
+        yearly_stats = analyze_temporal_trends(df, target)
+        create_temporal_plots(yearly_stats)
+        print_temporal_insights(yearly_stats)
+        all_results['yearly_stats'] = yearly_stats
+    
+    # 5. Análisis por Tipo de Propiedad
+    print("\n\n5. ANÁLISIS POR TIPO DE PROPIEDAD")
+    print("=" * 35)
+    
+    property_analysis = analyze_property_types(df, target)
+    price_stats_formatted = format_property_type_stats(property_analysis[0])
+    print_property_type_distribution(property_analysis[2])
+    
+    if include_visualizations:
+        create_property_type_plots(df, target)
+    
+    property_significance = analyze_property_type_significance(df, target)
+    
+    all_results['property_analysis'] = property_analysis
+    all_results['property_significance'] = property_significance
+    
+    # 6. Análisis de Comportamiento de Mercado
+    print("\n\n6. ANÁLISIS DEL COMPORTAMIENTO DE MERCADO")
+    print("=" * 45)
+    
+    market_behavior = analyze_market_behavior(df, target)
+    if include_visualizations:
+        create_market_behavior_plots(df, market_behavior, target)
+    
+    seasonal_patterns = analyze_seasonal_patterns(df, target)
+    
+    all_results['market_behavior'] = market_behavior
+    all_results['seasonal_patterns'] = seasonal_patterns
+    
+    # 7. Segmentación de Mercado
+    print("\n\n7. SEGMENTACIÓN DE MERCADO")
+    print("=" * 30)
+    
+    market_segmentation = analyze_market_segmentation(df, target)
+    if include_visualizations:
+        create_market_segmentation_plots(df, market_segmentation, target)
+        create_niche_analysis_plots(df, market_segmentation.get('niche_analysis', {}), target)
+    
+    print_segmentation_insights(market_segmentation, df)
+    
+    all_results['market_segmentation'] = market_segmentation
+    
+    # Resumen ejecutivo
+    print("\n\n" + "=" * 60)
+    print("RESUMEN EJECUTIVO")
+    print("=" * 60)
+    
+    print(f"Dataset analizado: {len(df):,} transacciones")
+    print(f"Regiones analizadas: {df['region'].nunique()}")
+    print(f"Precio promedio nacional: {df[target].mean():,.0f} DKK")
+    print(f"Precio/m² promedio nacional: {df['sqm_price'].mean():,.0f} DKK/m²")
+    
+    return all_results
+
+
+
+# =============================================================================
+# FUNCIONES AUXILIARES PARA EXPORTACIÓN DE RESULTADOS
+# =============================================================================
+
+def export_results_to_csv(results, output_dir='results/tablas/'):
+    """
+    Exportar resultados del análisis a archivos CSV.
+    
+    Parameters:
+    -----------
+    results : dict
+        Diccionario con resultados del análisis
+    output_dir : str
+        Directorio de salida para los archivos
+    """
+    import os
+    
+    # Crear directorio si no existe
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Exportar cada resultado
+    for key, value in results.items():
+        if isinstance(value, pd.DataFrame) and value is not None:
+            filename = f"{output_dir}descriptive_analysis_{key}.csv"
+            value.to_csv(filename)
+            print(f"Exportado: {filename}")
+
+
+def generate_summary_report(results):
+    """
+    Generar reporte resumen del análisis descriptivo.
+    
+    Parameters:
+    -----------
+    results : dict
+        Diccionario con resultados del análisis
+        
+    Returns:
+    --------
+    str
+        Reporte en formato texto
+    """
+    report = []
+    report.append("=" * 80)
+    report.append("REPORTE RESUMEN - ANÁLISIS DESCRIPTIVO")
+    report.append("=" * 80)
+    
+    if 'regional_stats' in results:
+        regional = results['regional_stats']
+        report.append(f"\n1. ANÁLISIS REGIONAL:")
+        report.append(f"   • Total regiones: {len(regional)}")
+        report.append(f"   • Región más cara: {regional.index[0]}")
+        report.append(f"   • Precio promedio máximo: {regional.iloc[0]['Promedio']:,.0f} DKK")
+    
+    if 'sqm_stats' in results:
+        sqm = results['sqm_stats']
+        report.append(f"\n2. ANÁLISIS PRECIO/M²:")
+        report.append(f"   • Región más eficiente: {sqm.index[0]}")
+        report.append(f"   • Precio/m² máximo: {sqm.iloc[0]['Promedio_m2']:,.0f} DKK/m²")
+        report.append(f"   • Regiones premium: {sqm['Es_Premium'].sum()}")
+    
+    if 'volume_stats' in results:
+        volume = results['volume_stats']
+        report.append(f"\n3. ANÁLISIS VOLUMEN:")
+        report.append(f"   • Región líder: {volume.index[0]}")
+        report.append(f"   • Total transacciones: {volume['Num_Transacciones'].sum():,}")
+        report.append(f"   • Concentración top 10: {volume.head(10)['Participacion_Mercado'].sum():.1f}%")
+    
+    return "\n".join(report)
+
+# =============================================================================
+# ANÁLISIS POR TIPO DE PROPIEDAD (SECCIÓN 3)
+# =============================================================================
+
+def analyze_property_types(df, target='purchase_price'):
+    """
+    Analizar diferencias por tipo de propiedad.
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        DataFrame con los datos
+    target : str
+        Columna objetivo (precio)
+        
+    Returns:
+    --------
+    tuple
+        (price_stats_by_type, physical_stats_by_type, regional_dist_by_type)
+    """
+    print("🏠 ANÁLISIS POR TIPO DE PROPIEDAD")
+    print("=" * 50)
+    
+    # 3.1 Estadísticas básicas por tipo
+    print("\n📊 3.1 Estadísticas de precios por tipo de propiedad:")
+    price_stats_by_type = df.groupby('house_type')[target].agg([
+        'count', 'mean', 'median', 'std', 'min', 'max'
+    ]).round(0)
+    price_stats_by_type['cv'] = (price_stats_by_type['std'] / price_stats_by_type['mean'] * 100).round(2)
+    price_stats_by_type = price_stats_by_type.sort_values('median', ascending=False)
+    
+    # 3.2 Características físicas por tipo
+    print("\n🏗️ 3.2 Características físicas por tipo:")
+    physical_stats_by_type = df.groupby('house_type').agg({
+        'sqm': ['mean', 'median', 'std'],
+        'no_rooms': ['mean', 'median', 'std'],
+        'sqm_price': ['mean', 'median', 'std']
+    }).round(2)
+    
+    # Aplanar columnas multinivel
+    physical_stats_by_type.columns = ['_'.join(col).strip() for col in physical_stats_by_type.columns]
+    
+    # 3.3 Distribución regional por tipo
+    print("\n🌍 3.3 Distribución regional por tipo de propiedad:")
+    regional_dist_by_type = pd.crosstab(df['region'], df['house_type'], normalize='columns') * 100
+    regional_dist_by_type = regional_dist_by_type.round(1)
+    
+    return price_stats_by_type, physical_stats_by_type, regional_dist_by_type
+
+
+def format_property_type_stats(price_stats_by_type):
+    """
+    Formatear estadísticas de tipo de propiedad para mostrar.
+    
+    Parameters:
+    -----------
+    price_stats_by_type : pd.DataFrame
+        Estadísticas de precios por tipo
+        
+    Returns:
+    --------
+    pd.DataFrame
+        Estadísticas formateadas
+    """
+    price_stats_formatted = price_stats_by_type.copy()
+    for col in ['count', 'mean', 'median', 'std', 'min', 'max']:
+        if col == 'count':
+            price_stats_formatted[col] = price_stats_formatted[col].apply(lambda x: f"{x:,.0f}")
+        else:
+            price_stats_formatted[col] = price_stats_formatted[col].apply(lambda x: f"{x:,.0f} DKK")
+    price_stats_formatted['cv'] = price_stats_formatted['cv'].apply(lambda x: f"{x:.1f}%")
+    
+    return price_stats_formatted
+
+
+def print_property_type_distribution(regional_dist_by_type):
+    """
+    Imprimir distribución regional por tipo de propiedad.
+    
+    Parameters:
+    -----------
+    regional_dist_by_type : pd.DataFrame
+        Distribución regional por tipo
+    """
+    print("🔝 Top 3 regiones por concentración de cada tipo:")
+    for house_type in regional_dist_by_type.columns:
+        top_regions_for_type = regional_dist_by_type[house_type].nlargest(3)
+        print(f"\n{house_type}:")
+        for region, pct in top_regions_for_type.items():
+            print(f"  • {region}: {pct:.1f}%")
+
+
+def create_property_type_plots(df, target='purchase_price'):
+    """
+    Crear visualizaciones por tipo de propiedad.
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        DataFrame con los datos
+    target : str
+        Columna objetivo (precio)
+    """
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig.suptitle('Análisis por Tipo de Propiedad', fontsize=16, fontweight='bold', y=0.98)
+
+    # 1. Boxplot de precios por tipo
+    sns.boxplot(data=df, x='house_type', y=target, ax=axes[0,0])
+    axes[0,0].set_title('Distribución de Precios por Tipo de Propiedad')
+    axes[0,0].set_xlabel('Tipo de Propiedad')
+    axes[0,0].set_ylabel('Precio (DKK)')
+    axes[0,0].tick_params(axis='x', rotation=45)
+    axes[0,0].set_ylim(0, 10000000)  # Limitar para mejor visualización
+
+    # 2. Precio por m² por tipo
+    sns.boxplot(data=df, x='house_type', y='sqm_price', ax=axes[0,1])
+    axes[0,1].set_title('Precio por m² por Tipo de Propiedad')
+    axes[0,1].set_xlabel('Tipo de Propiedad')
+    axes[0,1].set_ylabel('Precio por m² (DKK)')
+    axes[0,1].tick_params(axis='x', rotation=45)
+    axes[0,1].set_ylim(0, 80000)  # Limitar para mejor visualización
+
+    # 3. Tamaño promedio por tipo
+    avg_size_by_type = df.groupby('house_type')['sqm'].mean().sort_values(ascending=True)
+    avg_size_by_type.plot(kind='barh', ax=axes[1,0], color='lightcoral')
+    axes[1,0].set_title('Tamaño Promedio por Tipo de Propiedad')
+    axes[1,0].set_xlabel('Superficie (m²)')
+
+    # 4. Volumen de transacciones por tipo
+    transaction_volume_by_type = df['house_type'].value_counts()
+    transaction_volume_by_type.plot(kind='pie', ax=axes[1,1], autopct='%1.1f%%')
+    axes[1,1].set_title('Volumen de Transacciones por Tipo')
+    axes[1,1].set_ylabel('')
+
+    plt.tight_layout()
+    plt.show()
+
+
+def analyze_property_type_significance(df, target='purchase_price'):
+    """
+    Analizar significancia estadística entre tipos de propiedad.
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        DataFrame con los datos
+    target : str
+        Columna objetivo (precio)
+        
+    Returns:
+    --------
+    dict
+        Resultados de tests estadísticos
+    """
+    
+    print("\n3.4 Tests de significancia estadística entre tipos de propiedad:")
+    
+    # ANOVA para comparar precios entre tipos
+    house_types = df['house_type'].unique()
+    price_groups = [df[df['house_type'] == ht][target] for ht in house_types]
+    f_stat, p_value = f_oneway(*price_groups)
+
+    print(f"ANOVA - Diferencias de precio entre tipos de propiedad:")
+    print(f"F-estadístico: {f_stat:.2f}")
+    print(f"p-valor: {p_value:.2e}")
+    print(f"Interpretación: {'Hay diferencias significativas' if p_value < 0.05 else 'No hay diferencias significativas'}")
+
+    # Correlación entre características físicas y precio por tipo
+    print("\n3.5 Correlaciones precio vs características por tipo:")
+    correlations = {}
+    for house_type in house_types:
+        subset = df[df['house_type'] == house_type]
+        corr_sqm = subset[target].corr(subset['sqm'])
+        corr_rooms = subset[target].corr(subset['no_rooms'])
+        correlations[house_type] = {
+            'size_correlation': corr_sqm,
+            'rooms_correlation': corr_rooms
+        }
+        print(f"{house_type}:")
+        print(f"  Correlación precio-tamaño: {corr_sqm:.3f}")
+        print(f"  Correlación precio-habitaciones: {corr_rooms:.3f}")
+    
+    return {
+        'anova_f_stat': f_stat,
+        'anova_p_value': p_value,
+        'correlations': correlations
+    }
+
+
+# =============================================================================
+# ANÁLISIS DEL COMPORTAMIENTO DE MERCADO (SECCIÓN 4)
+# =============================================================================
+
+def analyze_market_behavior(df, target='purchase_price'):
+    """
+    Analizar comportamiento del mercado inmobiliario.
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        DataFrame con los datos
+    target : str
+        Columna objetivo (precio)
+        
+    Returns:
+    --------
+    dict
+        Resultados del análisis de mercado
+    """
+    print("=== ANÁLISIS DEL COMPORTAMIENTO DE MERCADO ===")
+    
+    results = {}
+    
+    # 4.1 Verificar columnas disponibles
+    print("4.1 Columnas disponibles relacionadas con mercado:")
+    market_columns = [col for col in df.columns if any(keyword in col.lower() 
+                     for keyword in ['sales', 'type', 'change', 'offer', 'quarter'])]
+    print("Columnas encontradas:", market_columns)
+    results['available_columns'] = market_columns
+    
+    # 4.2 Análisis por sales_type si está disponible
+    if 'sales_type' in df.columns:
+        print("\n4.1 Análisis por tipo de venta (sales_type):")
+        sales_analysis = df.groupby('sales_type').agg({
+            target: ['count', 'mean', 'median', 'std'],
+            'sqm_price': ['mean', 'median']
+        }).round(0)
+        
+        # Aplanar columnas
+        sales_analysis.columns = ['_'.join(col) for col in sales_analysis.columns]
+        results['sales_analysis'] = sales_analysis
+    else:
+        print("\n4.1 sales_type no disponible en el dataset")
+        results['sales_analysis'] = None
+    
+    # 4.3 Análisis de cambio oferta-compra
+    change_col = None
+    for col in df.columns:
+        if 'change' in col.lower() and ('offer' in col.lower() or 'purchase' in col.lower()):
+            change_col = col
+            break
+    
+    if change_col:
+        print(f"\n4.2 Análisis de variación precio oferta vs compra ({change_col}):")
+        change_stats = df[change_col].describe()
+        results['change_analysis'] = {
+            'column': change_col,
+            'stats': change_stats,
+            'categories': analyze_price_change_categories(df, change_col)
+        }
+    else:
+        print("\n4.2 Columna de cambio oferta-compra no disponible")
+        results['change_analysis'] = None
+    
+    # 4.4 Análisis temporal
+    temporal_results = analyze_temporal_patterns(df, target)
+    results.update(temporal_results)
+    
+    return results
+
+
+def analyze_price_change_categories(df, change_col):
+    """
+    Categorizar cambios entre oferta y compra.
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        DataFrame con los datos
+    change_col : str
+        Columna de cambio de precio
+        
+    Returns:
+    --------
+    pd.Series
+        Distribución de categorías
+    """
+    df_temp = df.copy()
+    df_temp['change_category'] = pd.cut(
+        df_temp[change_col],
+        bins=[-float('inf'), -5, -1, 1, 5, float('inf')],
+        labels=['Descuento >5%', 'Descuento 1-5%', 'Sin cambio ±1%', 'Premium 1-5%', 'Premium >5%']
+    )
+    change_dist = df_temp['change_category'].value_counts()
+    
+    print(f"Distribución de cambios:")
+    for cat, count in change_dist.items():
+        pct = count / len(df_temp) * 100
+        print(f"  {cat}: {count:,} ({pct:.1f}%)")
+    
+    return change_dist
+
+
+def analyze_temporal_patterns(df, target='purchase_price'):
+    """
+    Analizar patrones temporales usando fecha.
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        DataFrame con los datos
+    target : str
+        Columna objetivo (precio)
+        
+    Returns:
+    --------
+    dict
+        Resultados del análisis temporal
+    """
+    results = {}
+    
+    if 'date' in df.columns:
+        print("\n4.4 Análisis estacional usando la fecha:")
+        
+        df_temp = df.copy()
+        # Crear variables temporales
+        df_temp['year'] = pd.to_datetime(df_temp['date']).dt.year
+        df_temp['month'] = pd.to_datetime(df_temp['date']).dt.month
+        df_temp['quarter_from_date'] = pd.to_datetime(df_temp['date']).dt.quarter
+        
+        # Análisis por trimestre
+        quarterly_from_date = df_temp.groupby('quarter_from_date').agg({
+            target: ['count', 'mean', 'median'],
+            'sqm_price': ['mean', 'median']
+        }).round(0)
+        quarterly_from_date.columns = ['_'.join(col) for col in quarterly_from_date.columns]
+        
+        # Análisis por mes
+        monthly_stats = df_temp.groupby('month')[target].agg(['count', 'mean', 'median']).round(0)
+        
+        results['quarterly_analysis'] = quarterly_from_date
+        results['monthly_analysis'] = monthly_stats
+        results['temporal_variables'] = ['year', 'month', 'quarter_from_date']
+        
+        print("Estadísticas por trimestre (derivado de fecha):")
+        # No mostrar aquí para evitar duplicación
+        
+    else:
+        print("\n4.4 Análisis temporal limitado - columna date no disponible")
+        results['quarterly_analysis'] = None
+        results['monthly_analysis'] = None
+    
+    return results
+
+
+def create_market_behavior_plots(df, results, target='purchase_price'):
+    """
+    Crear visualizaciones del comportamiento de mercado.
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        DataFrame con los datos
+    results : dict
+        Resultados del análisis de mercado
+    target : str
+        Columna objetivo (precio)
+    """
+    
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig.suptitle('Análisis del Comportamiento de Mercado', fontsize=16, fontweight='bold', y=0.98)
+
+    # 1. Análisis por tipo de venta
+    if results['sales_analysis'] is not None:
+        # Filtrar tipos de venta con más de 1000 transacciones
+        major_sales_types = df['sales_type'].value_counts()
+        major_types = major_sales_types[major_sales_types > 1000].index
+        df_major_sales = df[df['sales_type'].isin(major_types)]
+        
+        sns.boxplot(data=df_major_sales, x='sales_type', y=target, ax=axes[0,0])
+        axes[0,0].set_title('Precios por Tipo de Venta')
+        axes[0,0].set_xlabel('Tipo de Venta')
+        axes[0,0].set_ylabel('Precio (DKK)')
+        axes[0,0].tick_params(axis='x', rotation=45)
+        axes[0,0].set_ylim(0, 8000000)
+    else:
+        axes[0,0].text(0.5, 0.5, 'Datos de sales_type\nno disponibles', 
+                      ha='center', va='center', transform=axes[0,0].transAxes)
+        axes[0,0].set_title('Tipo de Venta - No Disponible')
+
+    # 2. Distribución de cambios oferta vs compra
+    if results['change_analysis'] is not None:
+        change_col = results['change_analysis']['column']
+        change_filtered = df[change_col][(df[change_col] >= -25) & (df[change_col] <= 25)]
+        change_filtered.hist(bins=50, ax=axes[0,1], alpha=0.7, color='skyblue')
+        axes[0,1].axvline(0, color='red', linestyle='--', label='Sin cambio')
+        axes[0,1].axvline(change_filtered.mean(), color='orange', linestyle='--', 
+                         label=f'Media: {change_filtered.mean():.1f}%')
+        axes[0,1].set_title('Distribución de Cambios Oferta vs Compra')
+        axes[0,1].set_xlabel('% Cambio')
+        axes[0,1].set_ylabel('Frecuencia')
+        axes[0,1].legend()
+    else:
+        axes[0,1].text(0.5, 0.5, 'Datos de cambio\noferta-compra\nno disponibles', 
+                      ha='center', va='center', transform=axes[0,1].transAxes)
+        axes[0,1].set_title('Cambio Oferta-Compra - No Disponible')
+
+    # 3. Análisis por trimestre
+    if results['quarterly_analysis'] is not None and 'month' in df.columns:
+        df_temp = df.copy()
+        df_temp['quarter_from_date'] = pd.to_datetime(df_temp['date']).dt.quarter
+        quarterly_prices = df_temp.groupby('quarter_from_date')[target].median()
+        quarterly_prices.plot(kind='bar', ax=axes[1,0], color='lightgreen')
+        axes[1,0].set_title('Precio Mediano por Trimestre')
+        axes[1,0].set_xlabel('Trimestre')
+        axes[1,0].set_ylabel('Precio Mediano (DKK)')
+        axes[1,0].tick_params(axis='x', rotation=0)
+    else:
+        axes[1,0].text(0.5, 0.5, 'Datos de trimestre\nno disponibles', 
+                      ha='center', va='center', transform=axes[1,0].transAxes)
+        axes[1,0].set_title('Análisis Trimestral - No Disponible')
+
+    # 4. Volumen por trimestre
+    if results['quarterly_analysis'] is not None and 'month' in df.columns:
+        df_temp = df.copy()
+        df_temp['quarter_from_date'] = pd.to_datetime(df_temp['date']).dt.quarter
+        quarterly_volume = df_temp['quarter_from_date'].value_counts().sort_index()
+        quarterly_volume.plot(kind='bar', ax=axes[1,1], color='orange')
+        axes[1,1].set_title('Volumen de Transacciones por Trimestre')
+        axes[1,1].set_xlabel('Trimestre')
+        axes[1,1].set_ylabel('Número de Transacciones')
+        axes[1,1].tick_params(axis='x', rotation=0)
+    else:
+        axes[1,1].text(0.5, 0.5, 'Datos de trimestre\nno disponibles', 
+                      ha='center', va='center', transform=axes[1,1].transAxes)
+        axes[1,1].set_title('Volumen Trimestral - No Disponible')
+
+    plt.tight_layout()
+    plt.show()
+
+
+def print_volume_insights(volume_stats, correlation):
+    """
+    Imprimir insights del análisis de volumen.
+    
+    Parameters:
+    -----------
+    volume_stats : pd.DataFrame
+        Estadísticas de volumen
+    correlation : float
+        Correlación volumen-precio
+    """
+    print("\nINSIGHTS CLAVE - VOLUMEN DE TRANSACCIONES")
+    print("=" * 45)
+    print(f"Región líder: {volume_stats.index[0]} ({volume_stats.iloc[0]['Num_Transacciones']:,} trans.)")
+    print(f"Participación del líder: {volume_stats.iloc[0]['Participacion_Mercado']:.1f}%")
+    print(f"Mercados principales: {(volume_stats['Tipo_Mercado'] == 'Principal').sum()} regiones")
+    print(f"Concentración top 5: {volume_stats.head(5)['Participacion_Mercado'].sum():.1f}%")
+    print(f"Correlación volumen-precio: {'Positiva' if correlation > 0 else 'Negativa'} ({abs(correlation):.3f})")
+
+
+# =============================================================================
+# ANÁLISIS TEMPORAL
+# =============================================================================
+
+def analyze_temporal_trends(df):
+    """
+    Análisis de tendencias temporales de precios.
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        DataFrame con los datos de transacciones
+        
+    Returns:
+    --------
+    pd.DataFrame
+        DataFrame con estadísticas anuales
+    """
+    # Crear columnas de fecha
+    df['year'] = pd.to_datetime(df['date']).dt.year
+    df['month'] = pd.to_datetime(df['date']).dt.month
+    
+    # Estadísticas anuales
+    yearly_stats = df.groupby('year').agg({
+        'purchase_price': ['count', 'mean', 'median', 'std'],
+        'sqm_price': ['mean', 'median']
+    }).round(0)
+    
+    yearly_stats.columns = ['Transacciones', 'Precio_Promedio', 'Precio_Mediana', 'Precio_Std',
+                           'Precio_m2_Promedio', 'Precio_m2_Mediana']
+    
+    # Calcular tasas de crecimiento anual
+    yearly_stats['Crecimiento_Precio'] = yearly_stats['Precio_Promedio'].pct_change() * 100
+    yearly_stats['Crecimiento_m2'] = yearly_stats['Precio_m2_Promedio'].pct_change() * 100
+    
+    return yearly_stats
+
+
+# =============================================================================
+# ANÁLISIS ESTACIONAL
+# =============================================================================
+
+def analyze_seasonal_patterns(df, target='purchase_price'):
+    """
+    Analizar patrones estacionales detallados.
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        DataFrame con los datos
+    target : str
+        Columna objetivo (precio)
+        
+    Returns:
+    --------
+    dict
+        Resultados del análisis estacional
+    """
+    if 'date' not in df.columns:
+        print("Datos de fecha no disponibles para análisis estacional")
+        return None
+    
+    df_temp = df.copy()
+    df_temp['month'] = pd.to_datetime(df_temp['date']).dt.month
+    
+    print("\n4.5 Análisis de estacionalidad mensual:")
+        
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+    
+    # Precio mediano por mes
+    monthly_prices = df_temp.groupby('month')[target].median()
+    monthly_prices.plot(kind='bar', ax=ax1, color='lightblue')
+    ax1.set_title('Precio Mediano por Mes')
+    ax1.set_xlabel('Mes')
+    ax1.set_ylabel('Precio Mediano (DKK)')
+    
+    # Volumen por mes
+    monthly_volume = df_temp['month'].value_counts().sort_index()
+    monthly_volume.plot(kind='bar', ax=ax2, color='lightcoral')
+    ax2.set_title('Volumen de Transacciones por Mes')
+    ax2.set_xlabel('Mes')
+    ax2.set_ylabel('Número de Transacciones')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Interpretación de patrones estacionales
+    max_price_month = monthly_prices.idxmax()
+    min_price_month = monthly_prices.idxmin()
+    max_volume_month = monthly_volume.idxmax()
+    min_volume_month = monthly_volume.idxmin()
+    
+    seasonal_insights = {
+        'max_price_month': max_price_month,
+        'min_price_month': min_price_month,
+        'max_volume_month': max_volume_month,
+        'min_volume_month': min_volume_month,
+        'monthly_prices': monthly_prices,
+        'monthly_volume': monthly_volume
+    }
+    
+    print(f"Patrones estacionales identificados:")
+    print(f"- Mes con precios más altos: {max_price_month} ({monthly_prices[max_price_month]:,.0f} DKK)")
+    print(f"- Mes con precios más bajos: {min_price_month} ({monthly_prices[min_price_month]:,.0f} DKK)")
+    print(f"- Mes con más transacciones: {max_volume_month} ({monthly_volume[max_volume_month]:,} transacciones)")
+    print(f"- Mes con menos transacciones: {min_volume_month} ({monthly_volume[min_volume_month]:,} transacciones)")
+    
+    return seasonal_insights
