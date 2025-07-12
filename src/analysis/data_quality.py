@@ -94,7 +94,7 @@ def analyze_data_quality(df: pd.DataFrame) -> dict:
     return quality_metrics
 
 
-def verify_duplicates(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+def verify_duplicates(df: pd.DataFrame, columns: list[str]) -> int:
     """
     Verifica si hay filas duplicadas basadas en columnas específicas.
     
@@ -103,7 +103,7 @@ def verify_duplicates(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
         columns: Lista de nombres de columnas para verificar duplicados
         
     Returns:
-        DataFrame con filas duplicadas
+        Cantidad de filas duplicadas
     """
     # Convertir a lista si es un Index de pandas
     if hasattr(columns, 'tolist'):

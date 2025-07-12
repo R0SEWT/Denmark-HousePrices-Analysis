@@ -15,7 +15,7 @@ Dada la importancia de la vivienda tanto para la economía nacional como para el
 El conjunto de datos utilizado proviene de la plataforma Kaggle (aporte de Martin Frederiksen, 2024) e incluye ~1,5 millones de registros de ventas de viviendas residenciales en Dinamarca, cubriendo el período 1992 a 2024. Cada fila representa una transacción inmobiliaria residencial real durante esos 32 años, recopiladas originalmente de registros oficiales de ventas. El dataset completo (`.parquet`) contiene aproximadamente **1.5 millones de registros** de ventas de viviendas residenciales en Dinamarca durante el período **1992 a 2024**.
 
 
-![alt text](image.png)
+![Fuentes primarias del dataset de kaggle](utils/doc_src/fuentes_primarias.png)
 
 TODO: Elaborar e incluir proceso de mineria y limpieza de datos por parte de Martin Frederiksen
 [Link de repositorio del proceso de mineria y limpieza de datos ](https://github.com/MartinSamFred/Danish-residential-housingPrices-1992-2024)
