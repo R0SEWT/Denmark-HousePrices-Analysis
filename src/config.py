@@ -13,6 +13,7 @@ TABLES_DIR = RESULTS_DIR / "tablas"
 DATA_FILE = DATA_DIR / "DKHousingPrices.parquet"
 SAMPLE_FILE = DATA_DIR / "DKHousingPricesSample100k.csv"
 
+CLEAN_FILE = DATA_DIR / "processed" / "cleaned_data.parquet"
 NULL_FILE = DATA_DIR / "anomalias" / "df_nulls.csv"
 
 # === Configuración de H2O ===
