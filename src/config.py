@@ -13,6 +13,12 @@ TABLES_DIR = RESULTS_DIR / "tablas"
 DATA_FILE = DATA_DIR / "DKHousingPrices.parquet"
 SAMPLE_FILE = DATA_DIR / "DKHousingPricesSample100k.csv"
 
+NULL_FILE = DATA_DIR / "anomalias" / "df_nulls.csv"
+
+# === Configuración de H2O ===
+H2O_URL = "http://localhost:54321"
+DESTINATION_FRAME = "datos_h2o"
+
 # === Columnas relevantes ===
 TARGET = "purchase_price"
 CATEGORICAL_COLS = ["region", "house_type", "sales_type"]
