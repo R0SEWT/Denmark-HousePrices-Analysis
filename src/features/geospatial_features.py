@@ -67,22 +67,12 @@ def create_geographic_clusters(df: pd.DataFrame, n_clusters: int = 5) -> pd.Data
     
     # Clustering simple basado en características geográficas existentes
     if all(col in df_result.columns for col in ['urban_density', 'distance_to_center']):
-        try:
-            from sklearn.cluster import KMeans
-            
-            features = df_result[['urban_density', 'distance_to_center']].fillna(0)
-            kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-            df_result['geo_cluster'] = kmeans.fit_predict(features)
-            
-            print(f"Clusters geográficos creados: {n_clusters} clusters")
-        except ImportError:
-            # Si sklearn no está disponible, crear clusters simples basados en rangos
-            print("sklearn no disponible, creando clusters simples...")
-            df_result['geo_cluster'] = pd.qcut(
-                df_result['urban_density'] + df_result['distance_to_center'], 
-                q=n_clusters, 
-                labels=False, 
-                duplicates='drop'
-            )
+        from sklearn.cluster import KMeans
+        
+        features = df_result[['urban_density', 'distance_to_center']].fillna(0)
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+        df_result['geo_cluster'] = kmeans.fit_predict(features)
+        
+        print(f"Clusters geográficos creados: {n_clusters} clusters")
     
     return df_result

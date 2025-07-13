@@ -53,10 +53,14 @@ NULL_FILE = DATA_DIR / "anomalias" / "df_nulls.csv"
 # ============================================
 
 # Rutas para datos procesados
-PROCESSED_DATA_PATH = str(DATA_DIR / "processed" / "processed_data.parquet")
-TRAIN_DATA_PATH = str(DATA_DIR / "processed" / "train_data.parquet")
-TEST_DATA_PATH = str(DATA_DIR / "processed" / "test_data.parquet")
-FEATURE_METADATA_PATH = str(DATA_DIR / "processed" / "feature_metadata.json")
+PROCESSED_DATA_FILE = str(DATA_DIR / "processed" / "processed_data.parquet")
+TRAIN_DATA_FILE = str(DATA_DIR / "processed" / "train_data.parquet")
+TEST_DATA_FILE = str(DATA_DIR / "processed" / "test_data.parquet")
+FEATURE_METADATA_FILE = str(DATA_DIR / "processed" / "feature_metadata.json")
+SELECTED_FEATURES_FILE = str(DATA_DIR / "processed" / "selected_features.txt")
+SCALERS_FILE = str(DATA_DIR / "processed" / "scalers_fixed.pkl")
+
+TARGET = "log_price"  # Variable objetivo transformada
 
 # Modelos para entrenamiento
 REGRESSION_MODELS = [
