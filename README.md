@@ -138,3 +138,19 @@ EN MADRID UTILIZANDO TÉCNICAS DE EXPLORACIÓN DE DATOS E INTELIGENCIA ARTIFICIA
 [4] Nussupbekova, T. (2025). Denmark's Residential Property Market Analysis 2025.https://www.globalpropertyguide.com/europe/denmark/price-history
 
 [5] Copper, A. (2021).Explaining Machine Learning Models: A Non-Technical Guide to Interpreting SHAP Analyses. Aidan Cooper. https://www.aidancooper.co.uk/a-non-technical-guide-to-interpreting-shap-analyses
+
+
+https://stats.stackexchange.com/questions/453386/working-with-time-series-data-splitting-the-dataset-and-putting-the-model-into 
+
+
+No recomiendo ningún tipo de validación cruzada (incluso la validación cruzada de series temporales es algo complicada de usar en la práctica). En su lugar, utilice una simple división entre pruebas y entrenamiento para experimentos y pruebas de concepto iniciales, etc.
+
+Luego, al pasar a producción, no te molestes en dividir el entrenamiento, la prueba y la evaluación. Como bien señalaste, no quieres perder información valiosa de los últimos 90 días. En su lugar, en producción, entrenas varios modelos con todo el conjunto de datos y luego eliges el que te proporcione el AIC o BIC más bajo.
+
+...
+Para los métodos estadísticos, utilice una división simple de entrenamiento/prueba de series temporales para validaciones iniciales y pruebas de concepto, pero no utilice el CV para ajustar los hiperparámetros. En su lugar, entrene varios modelos en producción y utilice el AIC o el BIC como métrica para la selección automática de modelos. Además, realice este entrenamiento y selección con la mayor frecuencia posible (es decir, cada vez que obtenga nuevos datos de demanda).
+
+
+Este buen hombre nos dice que usemos el AIC o el BIC
+
+![alt text](image.png)

@@ -1834,3 +1834,94 @@ def clean_duplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
         print(f"✅ Columnas duplicadas eliminadas. Nuevo shape: {df.shape}")
     
     return df
+
+def add_geographic_enrichment(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Aplica enriquecimiento geográfico directamente.
+    
+    Args:
+        df: DataFrame con datos de propiedades
+        
+    Returns:
+        DataFrame enriquecido con características geográficas
+    """
+    print("Aplicando enriquecimiento geográfico...")
+    
+    df_result = df.copy()
+    
+    # Generar variables geográficas simuladas basadas en región
+    if 'region' in df_result.columns:
+        # Mapear regiones a características urbanas simuladas
+        urban_density_map = {
+            'Copenhagen': 5, 'Aarhus': 4, 'Odense': 3, 'Aalborg': 3,
+            'Frederiksberg': 5, 'Esbjerg': 2, 'Randers': 2, 'Kolding': 2
+        }
+        
+        # Densidad urbana (1-5, donde 5 es más urbano)
+        df_result['urban_density'] = df_result['region'].map(urban_density_map).fillna(1)
+        
+        # Distancia simulada al centro (basada en región)
+        center_distance_map = {
+            'Copenhagen': 10, 'Aarhus': 15, 'Odense': 20, 'Aalborg': 25,
+            'Frederiksberg': 5, 'Esbjerg': 35, 'Randers': 30, 'Kolding': 25
+        }
+        df_result['distance_to_center'] = df_result['region'].map(center_distance_map).fillna(50)
+        
+        # Variables categóricas geográficas
+        df_result['location_type'] = df_result['urban_density'].apply(
+            lambda x: 'Urban' if x >= 4 else 'Suburban' if x >= 2 else 'Rural'
+        )
+        
+        # Acceso a transporte (simulado)
+        import numpy as np
+        df_result['transport_access'] = df_result['urban_density'] * 0.8 + np.random.normal(0, 0.2, len(df_result))
+        df_result['transport_access'] = np.clip(df_result['transport_access'], 1, 5)
+        
+        # Crear clusters geográficos simples
+        df_result['geo_cluster'] = pd.qcut(
+            df_result['urban_density'] + df_result['distance_to_center'], 
+            q=5, 
+            labels=False, 
+            duplicates='drop'
+        )
+        
+        print(f"Características geográficas agregadas: urban_density, distance_to_center, location_type, transport_access, geo_cluster")
+    
+    return df_result
+
+def enhanced_feature_engineering_pipeline(df: pd.DataFrame, 
+                                        target_col: str = 'purchase_price',
+                                        output_dir: str = None,
+                                        include_geographic: bool = True) -> Dict[str, Any]:
+    """
+    Pipeline de feature engineering mejorado con enriquecimiento geográfico.
+    
+    Args:
+        df: DataFrame con datos de entrada
+        target_col: Variable objetivo
+        output_dir: Directorio de salida
+        include_geographic: Si incluir enriquecimiento geográfico
+        
+    Returns:
+        Diccionario con resultados del pipeline
+    """
+    # Ejecutar pipeline principal
+    results = run_complete_feature_engineering_pipeline(df, target_col, output_dir)
+    
+    if include_geographic:
+        print("\nAplicando enriquecimiento geográfico...")
+        df_enriched = add_geographic_enrichment(results['final_dataset'])
+        
+        # Actualizar dataset final con características geográficas
+        results['final_dataset'] = df_enriched
+        results['geographic_features'] = ['urban_density', 'distance_to_center', 'location_type', 'transport_access', 'geo_cluster']
+        
+        # Guardar dataset enriquecido
+        if output_dir:
+            output_path = Path(output_dir)
+            enriched_path = output_path / "feature_engineered_with_geography.parquet"
+            df_enriched.to_parquet(enriched_path)
+            results['saved_files']['enriched_geographic'] = enriched_path
+            print(f"Dataset con enriquecimiento geográfico guardado: {enriched_path}")
+    
+    return results
