@@ -37,6 +37,8 @@ def load_and_validate_data(data_path, destination_frame='df_clean', parallel=Fal
     --------
     pd.DataFrame
         DataFrame con los datos cargados y validados
+    h2o.H2OFrame
+        H2OFrame con los datos importados
     """
     try:
         if parallel:
@@ -63,7 +65,7 @@ def load_and_validate_data(data_path, destination_frame='df_clean', parallel=Fal
         print(f"Período: {df_clean['date'].min()} - {df_clean['date'].max()}")
         print(f"Regiones: {df_clean['region'].nunique()}")
         print(f"Rango precios: {df_clean['purchase_price'].min():,.0f} - {df_clean['purchase_price'].max():,.0f} DKK")
-        return df_clean
+        return df_clean , df_h2o
 
     except Exception as e:
         print(f"Error al cargar datos: {e}")

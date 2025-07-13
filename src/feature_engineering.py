@@ -1426,6 +1426,9 @@ def prepare_final_dataset(df: pd.DataFrame, target_col: str = 'purchase_price') 
         'dk_ann_infl_rate%', 'yield_on_mortgage_credit_bonds%', 'nom_interest_rate%'
     ]
     
+    # Asegurar que las variables cíclicas temporales se preserven siempre
+    critical_features = ['month_sin', 'month_cos', 'quarter_sin', 'quarter_cos']
+    
     all_columns = df.columns.tolist()
     feature_columns = [col for col in all_columns if col not in exclude_cols + [target_col]]
     
@@ -1487,7 +1490,17 @@ def prepare_final_dataset(df: pd.DataFrame, target_col: str = 'purchase_price') 
         
         # Seleccionar top features
         top_k = min(config['max_features'], len(feature_columns))
-        selected_features = combined_results.head(top_k)['feature'].tolist();
+        selected_features_from_ranking = combined_results.head(top_k)['feature'].tolist()
+        
+        # Asegurar que las variables cíclicas críticas estén incluidas
+        critical_features_available = [f for f in critical_features if f in feature_columns]
+        selected_features = list(set(selected_features_from_ranking + critical_features_available))
+        
+        # Si tenemos más features de las permitidas, priorizar las críticas
+        if len(selected_features) > config['max_features']:
+            # Mantener críticas + top features hasta completar max_features
+            non_critical = [f for f in selected_features_from_ranking if f not in critical_features_available]
+            selected_features = critical_features_available + non_critical[:config['max_features'] - len(critical_features_available)]
         
         print(f"✅ Seleccionadas {len(selected_features)} features de {len(feature_columns)}")
         
@@ -1834,3 +1847,63 @@ def clean_duplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
         print(f"✅ Columnas duplicadas eliminadas. Nuevo shape: {df.shape}")
     
     return df
+
+def add_geographic_enrichment(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Aplica enriquecimiento geográfico usando el módulo geospatial_features.
+    
+    Args:
+        df: DataFrame con datos de propiedades
+        
+    Returns:
+        DataFrame enriquecido con características geográficas
+    """
+    from .features.geospatial_features import add_geospatial_features, create_geographic_clusters
+    
+    print("Aplicando enriquecimiento geográfico...")
+    
+    # Agregar características geoespaciales
+    df_geo = add_geospatial_features(df)
+    
+    # Crear clusters geográficos
+    df_geo = create_geographic_clusters(df_geo, n_clusters=5)
+    
+    print("Enriquecimiento geográfico completado.")
+    return df_geo
+
+def enhanced_feature_engineering_pipeline(df: pd.DataFrame, 
+                                        target_col: str = 'purchase_price',
+                                        output_dir: str = None,
+                                        include_geographic: bool = True) -> Dict[str, Any]:
+    """
+    Pipeline de feature engineering mejorado con enriquecimiento geográfico.
+    
+    Args:
+        df: DataFrame con datos de entrada
+        target_col: Variable objetivo
+        output_dir: Directorio de salida
+        include_geographic: Si incluir enriquecimiento geográfico
+        
+    Returns:
+        Diccionario con resultados del pipeline
+    """
+    # Ejecutar pipeline principal
+    results = run_complete_feature_engineering_pipeline(df, target_col, output_dir)
+    
+    if include_geographic:
+        print("\nAplicando enriquecimiento geográfico...")
+        df_enriched = add_geographic_enrichment(results['final_dataset'])
+        
+        # Actualizar dataset final con características geográficas
+        results['final_dataset'] = df_enriched
+        results['geographic_features'] = ['urban_density', 'distance_to_center', 'location_type', 'transport_access', 'geo_cluster']
+        
+        # Guardar dataset enriquecido
+        if output_dir:
+            output_path = Path(output_dir)
+            enriched_path = output_path / "feature_engineered_with_geography.parquet"
+            df_enriched.to_parquet(enriched_path)
+            results['saved_files']['enriched_geographic'] = enriched_path
+            print(f"Dataset con enriquecimiento geográfico guardado: {enriched_path}")
+    
+    return results

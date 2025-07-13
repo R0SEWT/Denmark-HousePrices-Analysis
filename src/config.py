@@ -8,6 +8,7 @@ MODELS_DIR = PROJECT_ROOT / "models"
 RESULTS_DIR = PROJECT_ROOT / "results"
 CHARTS_DIR = RESULTS_DIR / "charts"
 TABLES_DIR = RESULTS_DIR / "tablas"
+CONFIG_FILE = PROJECT_ROOT / "src" / "config.py"
 
 # === Archivos de datos ===
 DATA_FILE = DATA_DIR / "DKHousingPrices.parquet"
@@ -43,3 +44,109 @@ DISTRIBUTED_DATA_FILE = DISTRIBUTED_DIR / "DKHousingPrices.parquet"
 DISTRIBUTED_SAMPLE_FILE = DISTRIBUTED_DIR / "DKHousingPricesSample100k.csv"
 DISTRIBUTED_CLEAN_FILE = DISTRIBUTED_DIR / "processed" / "cleaned_data.parquet"
 DISTRIBUTED_NULL_FILE = DISTRIBUTED_DIR / "anomalias" / "df_nulls.csv"
+
+NULL_FILE = DATA_DIR / "anomalias" / "df_nulls.csv"
+
+# ============================================
+# CONFIGURACIÓN PARA MODELADO (REGRESIONES Y ÁRBOLES)
+# Añadido manualmente desde feature_engineering.ipynb
+# ============================================
+
+# Rutas para datos procesados
+PROCESSED_DATA_FILE = str(DATA_DIR / "processed" / "processed_data.parquet")
+TRAIN_DATA_FILE = str(DATA_DIR / "processed" / "train_data.parquet")
+TEST_DATA_FILE = str(DATA_DIR / "processed" / "test_data.parquet")
+FEATURE_METADATA_FILE = str(DATA_DIR / "processed" / "feature_metadata.json")
+SELECTED_FEATURES_FILE = str(DATA_DIR / "processed" / "selected_features.txt")
+SCALERS_FILE = str(DATA_DIR / "processed" / "scalers_fixed.pkl")
+
+TARGET = "log_price"  # Variable objetivo transformada
+
+# Modelos para entrenamiento
+REGRESSION_MODELS = [
+    "LinearRegression", 
+    "Ridge", 
+    "Lasso", 
+    "ElasticNet", 
+    "SVR"
+]
+
+TREE_MODELS = [
+    "DecisionTree", 
+    "RandomForest", 
+    "GradientBoosting", 
+    "XGBoost", 
+    "LightGBM"
+]
+
+# Información de datasets procesados
+DATASET_INFO = {
+    "processed_data": "Dataset completo con feature engineering aplicado",
+    "train_data": "Conjunto de entrenamiento para modelado supervisado",
+    "test_data": "Conjunto de prueba para evaluación final de modelos"
+}
+
+# Configuración específica para modelos de árboles
+TREE_PARAMS = {
+    "RandomForest": {
+        "n_estimators": 200,
+        "max_depth": 15,
+        "min_samples_split": 5,
+        "n_jobs": -1,
+        "random_state": 42
+    },
+    "GradientBoosting": {
+        "n_estimators": 200,
+        "learning_rate": 0.05,
+        "max_depth": 5,
+        "subsample": 0.8,
+        "random_state": 42
+    },
+    "XGBoost": {
+        "n_estimators": 200,
+        "learning_rate": 0.05,
+        "max_depth": 6,
+        "colsample_bytree": 0.8,
+        "subsample": 0.8,
+        "tree_method": "auto",
+        "random_state": 42
+    },
+    "LightGBM": {
+        "n_estimators": 200,
+        "learning_rate": 0.05,
+        "max_depth": 7,
+        "num_leaves": 128,
+        "colsample_bytree": 0.8,
+        "subsample": 0.8,
+        "random_state": 42,
+        "n_jobs": -1
+    }
+}
+
+# Configuración específica para modelos de regresión
+REGRESSION_PARAMS = {
+    "Ridge": {
+        "alpha": [0.01, 0.1, 1.0, 10.0, 100.0]
+    },
+    "Lasso": {
+        "alpha": [0.001, 0.01, 0.1, 1.0, 10.0]
+    },
+    "ElasticNet": {
+        "alpha": [0.001, 0.01, 0.1, 1.0], 
+        "l1_ratio": [0.1, 0.5, 0.9]
+    },
+    "SVR": {
+        "kernel": ["linear", "poly", "rbf"],
+        "C": [0.1, 1.0, 10.0],
+        "gamma": ["scale", "auto"]
+    }
+}
+
+# Métricas para evaluación
+EVALUATION_METRICS = [
+    "r2", 
+    "rmse", 
+    "mae", 
+    "mape", 
+    "medae"
+]

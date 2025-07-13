@@ -15,10 +15,48 @@ Dada la importancia de la vivienda tanto para la economía nacional como para el
 El conjunto de datos utilizado proviene de la plataforma Kaggle (aporte de Martin Frederiksen, 2024) e incluye ~1,5 millones de registros de ventas de viviendas residenciales en Dinamarca, cubriendo el período 1992 a 2024. Cada fila representa una transacción inmobiliaria residencial real durante esos 32 años, recopiladas originalmente de registros oficiales de ventas. El dataset completo (`.parquet`) contiene aproximadamente **1.5 millones de registros** de ventas de viviendas residenciales en Dinamarca durante el período **1992 a 2024**.
 
 
-![Fuentes primarias del dataset de kaggle](utils/doc_src/fuentes_primarias.png)
+### 2.1 Procedencia y recopilación
 
-TODO: Elaborar e incluir proceso de mineria y limpieza de datos por parte de Martin Frederiksen
-[Link de repositorio del proceso de mineria y limpieza de datos ](https://github.com/MartinSamFred/Danish-residential-housingPrices-1992-2024)
+* Los datos fueron recolectados mediante técnicas de **web scraping**, ejecutadas sobre fuentes públicas como:
+
+  * El portal inmobiliario **Boliga**.
+  * Sitios oficiales de estadísticas danesas, como **Statistikbanken** y **Danmarks Statistik**.
+
+* La recolección se llevó a cabo usando **scripts en Python**, ejecutados en notebooks Jupyter del repositorio público del autor.
+
+![Fuentes primarias del dataset de kaggle](../utils/doc_src/fuentes_primarias.png)
+_- Fuentes primarias del dataset de Kaggle (repositorio de Martin Frederiksen)_
+
+### 2.2 Proceso de limpieza y estructuración
+
+* Se descargaron más de **80 archivos CSV** comprimidos, ubicados en la carpeta *Housing\_data\_raw*, utilizando el notebook `Webscrape_script.ipynb`.
+
+* Posteriormente, el notebook `BoligsalgConcatCleaningGit.ipynb` concatenó, depuró y estructuró los datos mediante:
+
+  * Estandarización de formatos (fechas, precios, áreas).
+  * Eliminación de valores inválidos o simbólicos (como guiones ‘–’).
+  * Filtrado o imputación de datos faltantes según reglas definidas.
+
+### 2.3 Enriquecimiento de variables
+
+* A los datos transaccionales se integraron variables **macroeconómicas y geográficas**, tales como:
+
+  * **Tasas de inflación e interés.**
+  * **Datos hipotecarios históricos.**
+  * **Códigos postales y regiones administrativas.**
+
+* Estos datos complementarios se extrajeron de fuentes públicas adicionales y se incorporaron desde la carpeta *Additional\_data* del repositorio original.
+
+### 2.4 Estructura final del dataset
+
+* El resultado final consiste en **dos archivos `.parquet`** (`DKHousingprices_1` y `DKHousingprices_2`) que contienen:
+
+  * Datos consolidados, limpios y estructurados.
+  * Variables clave como: fecha de venta, precio, tipo de propiedad, superficie, número de habitaciones y ubicación.
+  * Integración de contexto económico y geográfico para potenciar análisis predictivos y exploratorios.
+
+[Link de repositorio del proceso de mineria y limpieza de datos llevado a cabo por Martin Frederiksen](https://github.com/MartinSamFred/Danish-residential-housingPrices-1992-2024)
+
 
 ---
 
@@ -87,17 +125,121 @@ Desarrollar un análisis exploratorio (EDA) y un modelo predictivo explicable de
   * Interpretabilidad con SHAP o coeficientes
   * Detección de anomalías sobre residuales de series temporales
 
-![Figura V](utils/doc_src/data_pipeline_overview.png)
+<p align="center">
+  <img src="utils/doc_src/data_pipeline_overview.png" alt="Figura V" />
+</p>
 
-*Figura V. Pipeline metodológico para el análisis y predicción de precios de vivienda
+<p align="center"><em>Figura V. Data Pipeline para el análisis y predicción de precios de vivienda</em></p>
+
 
 
 ## Analisis de datos
 
-![Figura X](utils/doc_src/data_analysis_flow_complete.png)
+<p align="center">
+  <img src="utils/doc_src/data_analysis_flow_complete.png" alt="Figura V" />
+</p>
 
-*Figura X. Flujo de trabajo general del análisis de datos y predicción de precios con tareas proyectadas (TBD)*
-<!-- Verificar como agregar una descripcion a una imagen en MD -->
+<p align="center"><em>Figura X. Flujo de trabajo general del análisis de datos y predicción de precios con tareas proyectadas (TBD)</em></p>
+
+
+
+### 3.2.1 Análisis exploratorio de los datos (EDA)
+
+#### 3.2.1.1 Carga del dataset
+<p align="center">
+  <img src="utils/doc_src/cluster_visualise.png" alt="Figura V" />
+</p>
+
+<p align="center"><em>Figura X. Iniciacion de cluster H2O</em></p>
+
+* Se utilizó el dataset completo de precios de viviendas, que contiene aproximadamente **1.5 millones de registros** y **19 columnas** relevantes para el análisis.
+
+Para lograrlo, se realizó una carga distribuida del dataset en un clúster H2O con dos nodos de cómputo, lo que permitió manejar eficientemente el volumen de datos y realizar análisis complejos sin comprometer el rendimiento.
+
+<p align="center">
+  <img src="utils/doc_src/cluster.png" alt="Figura V" />
+</p>
+
+<p align="center"><em>Figura X. Inicialización del clúster distribuido en H2O</em></p>
+
+Los datos fueron cargados mediante `h2o.import_file()`, una función que permite leer grandes volúmenes en memoria distribuida. Para ello, se habilitó una carpeta compartida en el servidor utilizando **Samba**, la cual fue montada como directorio de trabajo accesible por todos los nodos del clúster H2O.
+
+
+* El clúster se configuró con dos nodos conectados con las siguientes especificaciones:
+
+| Nodo   | CPU               | RAM          | GPU                  |
+|--------|------------------|--------------|-----------------------|
+| Nodo 1 | Intel i5-12600K  | 16 GB DDR4   | RTX 4060 (8 GB)       |
+| Nodo 2 | AMD Ryzen 5 7600X| 16 GB DDR5   | RTX 4060 Ti (16 GB)   |
+
+
+![image-5.png](attachment:image-5.png)
+
+
+
+*Resumen del dataset: número de registros, columnas y dimensiones generales.*
+
+* El conjunto presenta una estructura manejable desde el punto de vista computacional, a pesar de su volumen.
+
+![image-3.png](attachment:image-3.png)
+
+*Distribución de tipos de datos presentes en las columnas.*
+
+* Se observa que la mayoría de las columnas contienen datos **numéricos**, lo cual es favorable para su análisis y posterior modelado.
+
+![image-2.png](attachment:image-2.png)
+
+
+*Análisis del uso de memoria.*
+
+* Se valida que el tamaño del dataset es considerable, pero no excede la capacidad de carga en memoria disponible.
+
+![image-6.png](attachment:image-6.png)
+*Estadísticos descriptivos, valores nulos y ceros.*
+
+* Se identificaron algunas **inconsistencias** y registros con valores atípicos o nulos que requieren tratamiento posterior.
+
+![image-7.png](attachment:image-7.png)
+
+Al tratarse de una presencia menor al 0.1 %, se decide usar el método de análsis de casos completos (eliminando los casos), sin descuidar el análsis requerido para identificar la perdida de datos.
+
+Se determina el mecanismo de perdida de datos, 
+Tras inspeccionar el proceso de scrapeo en el respositorio de origen de los datos:
+
+Se observa que la mayor perdida de datos corresponde a una de tipo parche, asociada a los primeros (~1000) IDs.
+En un analsis posterior se observó una correlación positiva entre date (en formato timestap) y estos, perteneciendo todos al primer quarter registrado.
+
+se reaizaron analisis univariados y bivariados para identificar patrones y relaciones entre variables.
+
+![image-9.png](attachment:image-9.png)
+![image-10.png](attachment:image-10.png)
+
+![image-11.png](attachment:image-11.png)
+
+![image-12.png](attachment:image-12.png)
+
+Se incluyo el id para validar que los datos se encuentran ordenados y no hay duplicados.
+![image-13.png](attachment:image-13.png)
+
+Finalmente mencionar que no se encontraron registros duplicados, consecuentemente no se tomaron medidas en este aspecto.
+
+
+
+
+## Modelización.  Comprende  la  aplicación  de  los  algoritmos  de  aprendizaje 
+supervisado sobre la plataforma de Big Data llamada H2O y los compara.  
+  
+ Resultados. Comunicar los principales resultados obtenidos (uso de métricas 
+y tablas comparativas).  
+  
+ Conclusiones. En un párrafo redactar las conclusiones del trabajo, 
+especificando la técnica utilizada, los resultados obtenidos (positivos o no).  
+  
+ Recomendaciones. Redactar los trabajos futuros.  
+  
+ Referencias bibliográficas 
+
+
 
 ##  Análisis exploratorio de los datos (EDA).  
 
@@ -138,3 +280,19 @@ EN MADRID UTILIZANDO TÉCNICAS DE EXPLORACIÓN DE DATOS E INTELIGENCIA ARTIFICIA
 [4] Nussupbekova, T. (2025). Denmark's Residential Property Market Analysis 2025.https://www.globalpropertyguide.com/europe/denmark/price-history
 
 [5] Copper, A. (2021).Explaining Machine Learning Models: A Non-Technical Guide to Interpreting SHAP Analyses. Aidan Cooper. https://www.aidancooper.co.uk/a-non-technical-guide-to-interpreting-shap-analyses
+
+
+https://stats.stackexchange.com/questions/453386/working-with-time-series-data-splitting-the-dataset-and-putting-the-model-into 
+
+
+No recomiendo ningún tipo de validación cruzada (incluso la validación cruzada de series temporales es algo complicada de usar en la práctica). En su lugar, utilice una simple división entre pruebas y entrenamiento para experimentos y pruebas de concepto iniciales, etc.
+
+Luego, al pasar a producción, no te molestes en dividir el entrenamiento, la prueba y la evaluación. Como bien señalaste, no quieres perder información valiosa de los últimos 90 días. En su lugar, en producción, entrenas varios modelos con todo el conjunto de datos y luego eliges el que te proporcione el AIC o BIC más bajo.
+
+...
+Para los métodos estadísticos, utilice una división simple de entrenamiento/prueba de series temporales para validaciones iniciales y pruebas de concepto, pero no utilice el CV para ajustar los hiperparámetros. En su lugar, entrene varios modelos en producción y utilice el AIC o el BIC como métrica para la selección automática de modelos. Además, realice este entrenamiento y selección con la mayor frecuencia posible (es decir, cada vez que obtenga nuevos datos de demanda).
+
+
+Este buen hombre nos dice que usemos el AIC o el BIC
+
+![alt text](image.png)

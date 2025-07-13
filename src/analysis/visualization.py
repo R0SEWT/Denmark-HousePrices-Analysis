@@ -1,12 +1,15 @@
 """
 Módulo de visualización
 Contiene funciones especializadas para crear visualizaciones
+para análisis y modelado de datos inmobiliarios.
 """
 
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
+from pathlib import Path
+from typing import List, Dict, Any, Union, Optional, Tuple
 
 
 def plot_target_distribution(df: pd.DataFrame, target: str):
@@ -252,5 +255,108 @@ def create_advanced_univariate_dashboard(df):
         create_categorical_summary_plot(df, categorical_cols[:5])  # Máximo 5 para no sobrecargar
     
     print(f"\n{'='*80}")
+
+
+def plot_feature_importance(
+    features: List[str],
+    scores: List[float],
+    output_path: Optional[Path] = None,
+    title: str = 'Variables Predictivas Críticas para el Modelado',
+    figsize: Tuple[int, int] = (12, 8)
+) -> plt.Figure:
+    """
+    Crea una visualización profesional de importancia de features.
+    
+    Args:
+        features: Lista con nombres de las features
+        scores: Lista con las puntuaciones de importancia
+        output_path: Ruta donde guardar la visualización (opcional)
+        title: Título para la visualización
+        figsize: Tamaño de la figura (ancho, alto)
+        
+    Returns:
+        Figura de matplotlib
+    """
+    # Crear figura
+    fig = plt.figure(figsize=figsize)
+    
+    # Crear gráfico con estilo corporativo
+    plt.style.use('seaborn-v0_8-whitegrid')
+    bars = plt.barh(np.arange(len(features)), scores, color='#3366cc', alpha=0.8)
+    
+    # Añadir valores a las barras
+    for i, (bar, score) in enumerate(zip(bars, scores)):
+        plt.text(score + 0.01, bar.get_y() + bar.get_height()/2, f'{score:.3f}', 
+                va='center', ha='left', fontsize=10, color='#333333')
+    
+    plt.yticks(np.arange(len(features)), features, fontsize=11)
+    plt.xlabel('Puntuación de Importancia Combinada', fontsize=12)
+    plt.title(title, fontsize=14, fontweight='bold')
+    plt.gca().invert_yaxis()
+    plt.tight_layout()
+    
+    # Guardar la visualización si se especifica ruta
+    if output_path:
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    
+    return fig
+
+
+def plot_model_comparison(
+    model_names: List[str],
+    metric_values: Dict[str, List[float]],
+    metric_name: str = 'R²',
+    ascending: bool = True,
+    output_path: Optional[Path] = None,
+    figsize: Tuple[int, int] = (10, 6)
+) -> plt.Figure:
+    """
+    Crea un gráfico de barras para comparar rendimiento de múltiples modelos.
+    
+    Args:
+        model_names: Lista con nombres de modelos
+        metric_values: Diccionario con valores de métricas por modelo
+        metric_name: Nombre de la métrica para etiquetas
+        ascending: Si es True, ordena los valores ascendentemente
+        output_path: Ruta para guardar la visualización (opcional)
+        figsize: Tamaño de la figura
+        
+    Returns:
+        Figura de matplotlib
+    """
+    # Extraer valores de la métrica principal
+    values = metric_values.get(list(metric_values.keys())[0], [])
+    
+    # Ordenar por rendimiento
+    sorted_indices = np.argsort(values)
+    if not ascending:
+        sorted_indices = sorted_indices[::-1]
+    
+    sorted_models = [model_names[i] for i in sorted_indices]
+    sorted_values = [values[i] for i in sorted_indices]
+    
+    # Crear figura
+    fig = plt.figure(figsize=figsize)
+    
+    # Crear gráfico de barras
+    colors = plt.cm.viridis(np.linspace(0, 0.8, len(sorted_models)))
+    bars = plt.bar(sorted_models, sorted_values, color=colors, alpha=0.8)
+    
+    # Añadir valores a las barras
+    for i, (bar, value) in enumerate(zip(bars, sorted_values)):
+        plt.text(bar.get_x() + bar.get_width()/2, value + max(sorted_values)*0.01,
+                f'{value:.3f}', ha='center', va='bottom', fontsize=9)
+    
+    plt.xticks(rotation=45, ha='right')
+    plt.xlabel('Modelo', fontsize=12)
+    plt.ylabel(f'Valor de {metric_name}', fontsize=12)
+    plt.title(f'Comparación de Modelos por {metric_name}', fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    
+    # Guardar la visualización si se especifica ruta
+    if output_path:
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    
+    return fig
     print("DASHBOARD COMPLETADO")
     print("="*80)
