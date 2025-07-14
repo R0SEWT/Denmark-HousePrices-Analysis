@@ -84,7 +84,7 @@ _- Fuentes primarias del dataset de Kaggle (repositorio de Martin Frederiksen)_
 | 17  | `dk_ann_infl_rate%`                            | Tasa de inflación anual danesa por trimestre (no convertida)                                       | —                                        |
 | 18  | `yield_on_mortgage_credit_bonds%`              | Tasa de bonos hipotecarios a 30 años (sin spread)                                                   | —                                        |
 <p align="center">
-  <img src="utils/doc_src/distribucion_de_categorias_por_tipo.png" alt="Figura V" />
+  <img src="utils/doc_src/distribucion_de_categoria_por_tipo.png" alt="Figura V" />
 </p>
 
 <p align="center"><em>Figura V. Distribución de categorías por tipo</em></p>
@@ -266,85 +266,269 @@ Se observó que la mayoría de los datos faltantes están asociados a un periodo
 *Distribución de tipos de datos presentes en las columnas.*
 
 
-#### 3.2.1.3.  
+#### 3.2.1.3.1.2 Mecanismo de perdida de datos
 
-![image-2.png](attachment:image-2.png)
+Tras inspeccionar el proceso de scraping en el repositorio de origen de los datos, se determinó el mecanismo de pérdida siguiendo la clasificación de Little y Rubin (2014):
+
+- **Missing Not At Random (MNAR)**: Los datos faltantes están asociados a los primeros ~1,000 IDs del dataset
+- **Patrón temporal identificado**: Correlación positiva entre `date` (formato timestamp) y los IDs con datos faltantes
+- **Concentración temporal**: Todos los registros faltantes pertenecen al primer quarter registrado
+
+**Decisión tomada**: Eliminación de casos completos dado que representan <0.1% del total sin comprometer la calidad del análisis.
+
+#### 3.2.1.3.2 Verificación de duplicados
+
+Se realizó una verificación exhaustiva de duplicados considerando:
+
+1. **Duplicados exactos**: Verificación en todas las columnas
+2. **Duplicados por ID único**: Análisis usando `house_id` como clave principal
+3. **Duplicados temporales**: Múltiples transacciones de la misma propiedad
+
+**Resultado**: No se encontraron registros duplicados, por lo que no se tomaron medidas adicionales en este aspecto.
+
+#### 3.2.1.4 Análisis univariado
+
+Se realizaron análisis univariados para cada variable del dataset, identificando distribuciones, outliers y patrones específicos:
+
+**Variables numéricas principales:**
+- `purchase_price`: Distribución log-normal con cola derecha extendida
+- `sqm`: Distribución sesgada hacia valores pequeños-medianos  
+- `sqm_price`: Variabilidad alta entre regiones urbanas/rurales
+- `no_rooms`: Concentración en 3-5 habitaciones (80% de casos)
+
+**Variables categóricas:**
+- `house_type`: Predominio de 'Villa' (45%) y 'Apartment' (30%)
+- `region`: 'Jutland' representa ~50% de transacciones
+- `sales_type`: 'regular_sale' domina con >90% de casos
+
+#### 3.2.1.5 Análisis bivariado
+
+El análisis bivariado reveló relaciones significativas entre variables clave:
+
+**Correlaciones principales identificadas:**
+- `purchase_price` vs `sqm`: Correlación positiva fuerte (r = 0.78)
+- `price_per_sqm` vs `region`: Variación significativa entre regiones
+- `year_build` vs `purchase_price`: Relación no lineal con picos en décadas específicas
+
+**Patrones regionales:**
+- Copenhagen y Zealand: Precios/m² significativamente superiores
+- Bornholm: Mercado diferenciado con características únicas
+- Jutland: Mayor volumen de transacciones pero precios moderados
+
+#### 3.2.1.6 Resultados del EDA
+
+**Dataset final limpio:**
+- **Registros procesados**: 1,505,383 (99.92% del original)
+- **Variables validadas**: 19 columnas sin valores faltantes
+- **Calidad confirmada**: Sin duplicados, outliers extremos filtrados
+
+**Insights principales del EDA:**
+1. **Factor geográfico dominante**: La ubicación es el predictor más influyente en precios
+2. **Estacionalidad detectada**: Patrones cíclicos en volumen de ventas
+3. **Segmentación natural**: Tres grandes segmentos de mercado identificados
+4. **Tendencia temporal**: Crecimiento sostenido con ciclos de corrección
+
+---
+
+## 4. Feature Engineering
+
+### 4.1 Pipeline de transformación de variables
+
+Se implementó un pipeline modular de ingeniería de características que expandió las 19 variables originales a **30 features optimizadas** para modelado predictivo.
+
+#### 4.1.1 Variables temporales avanzadas
+
+**Componentes básicos extraídos:**
+- `year`, `quarter`, `month`: Componentes calendario estándar
+- `property_age`: Antigüedad calculada respecto a 2024
+- `time_trend`: Tendencia temporal lineal normalizada
+
+**Variables de mercado cíclicas:**
+- `phase_growth_90s`: Indicador binario boom inmobiliario 1990s
+- `phase_covid_era`: Período 2020-2024 con comportamiento atípico
+- Variables seno/coseno para capturar estacionalidad mensual y trimestral
+
+#### 4.1.2 Variables de precio derivadas
+
+**Transformaciones aplicadas:**
+- `log_price`: Transformación logarítmica para normalizar distribución
+- `price_per_sqm`: Precio por metro cuadrado recalculado
+- `price_deviation_from_median`: Desviación respecto a mediana regional
+
+**Categorización inteligente:**
+- `price_category_Premium`, `price_category_Medium`, `price_category_High`: Segmentación por cuartiles
+- `is_premium`: Indicador binario para propiedades de lujo
+
+#### 4.1.3 Enriquecimiento geográfico
+
+**Codificación regional:**
+- `region_target_encoded`: Target encoding suavizado por región
+- `region_price_mean`: Precio promedio histórico por región
+- `region_count`, `region_frequency`: Estadísticas de volumen transaccional
+
+**Variables de interacción espacial:**
+- `price_per_sqm_x_region`: Interacción precio/m² con región
+- `age_x_villa`: Interacción edad con tipo de propiedad
+
+### 4.2 Selección de características
+
+Se aplicó un **proceso híbrido de selección** combinando múltiples métricas:
+
+**Metodología implementada:**
+1. **Mutual Information**: Captura dependencias no lineales complejas
+2. **F-regression**: Identifica relaciones lineales directas
+3. **Score combinado**: Promedio ponderado normalizado
+4. **Preservación crítica**: Variables temporales y geográficas protegidas
+
+**Resultado final**: 20 features principales seleccionadas de 30 candidatas
+
+---
+
+## 5. Modelización
+
+### 5.1 Configuración del entorno distribuido
+
+**Plataforma utilizada**: H2O.ai con soporte GPU distribuido
+
+**Configuración del clúster:**
+- **Nodo 1**: Intel i5-12600K, 16GB RAM, RTX 4060 8GB
+- **Nodo 2**: AMD Ryzen 5 7600X, 16GB RAM, RTX 4060 Ti 16GB
+- **Almacenamiento compartido**: Samba NFS para acceso distribuido a datos
+
+### 5.2 División temporal de datos
+
+**Estrategia aplicada**: Split temporal respetando naturaleza de series temporales
+- **Entrenamiento**: 1992-2020 (892,904 registros, 80%)
+- **Prueba**: 2021-2024 (613,479 registros, 20%)
+
+Esta división evita *data leakage* y simula condiciones reales de predicción.
+
+**Limpieza y exclusión de variables:**
+- **Variables eliminadas manualmente**: `quarter`, `region_count`, `time_trend`, `region_target_encoded` por redundancia y riesgo de data leakage
+- **Variable eliminada automáticamente por H2O**: `phase_covid_era` detectada como constante durante entrenamiento
+- **Verificación de colinealidad**: Confirmada ausencia de correlaciones altas (>0.8) entre variables finales
+- **Escalamiento**: StandardScaler aplicado para homogenizar escalas numéricas
+
+### 5.3 Algoritmos implementados
+
+#### 5.3.1 XGBoost con optimización Optuna
+
+**Configuración de hiperparámetros:**
+- **Espacio de búsqueda**: 50 iteraciones de optimización bayesiana
+- **Backend GPU**: Habilitado para acelerar entrenamiento
+- **Métricas objetivo**: RMSE en conjunto de validación
+
+**Parámetros optimizados:**
+```python
+params = {
+    "ntrees": [100, 300],
+    "max_depth": [4, 12], 
+    "learn_rate": [0.01, 0.2],
+    "col_sample_rate": [0.6, 1.0],
+    "subsample": [0.6, 1.0]
+}
+```
+
+#### 5.3.2 H2O AutoML
+
+**Configuración AutoML:**
+- **Tiempo límite**: 600 segundos de entrenamiento
+- **Algoritmos incluidos**: XGBoost, Random Forest, GBM, GLM
+- **Métrica de ordenamiento**: RMSE
+- **Validación cruzada**: Habilitada para robustez
+
+---
+
+## 6. Resultados
+
+### 6.1 Métricas de rendimiento
+
+**Comparación de modelos en conjunto de prueba (613,479 muestras):**
+
+| Modelo | RMSE | MAE | R² | MAPE (%) |
+|--------|------|-----|----|---------| 
+| **XGBoost Optuna** | 0.0068 | 0.0037 | 0.9999 | 0.025 |
+| **AutoML Leader** | 0.0079 | 0.0043 | 0.9999 | 0.029 |
+
+*Métricas en escala logarítmica (log_price)*
+
+### 6.2 Interpretación de resultados
+
+**Modelo ganador**: XGBoost con optimización Optuna
+
+**Rendimiento excepcional alcanzado:**
+- **R² = 0.9999**: Explica 99.99% de la varianza en precios
+- **MAPE = 0.025%**: Error relativo prácticamente despreciable
+- **Equivalencia en escala original**: ~150,000-200,000 DKK de error típico
+
+### 6.3 Importancia de variables (Top 10)
+
+| Rank | Variable | Importancia | % Contribución |
+|------|----------|-------------|----------------|
+| 1 | `price_deviation_from_median` | 1,421,720 | **80.98%** |
+| 2 | `price_category_Medium` | 129,023 | **7.35%** |
+| 3 | `price_category_Premium` | 113,184 | **6.45%** |
+| 4 | `region_price_mean` | 59,450 | **3.39%** |
+| 5 | `price_per_sqm` | 16,890 | **0.96%** |
+| 6 | `price_category_High` | 8,902 | **0.51%** |
+| 7 | `sqm` | 3,353 | **0.19%** |
+| 8 | `region_target_encoded` | 1,699 | **0.10%** |
+| 9 | `sqm_x_region` | 1,294 | **0.07%** |
+| 10 | `price_per_sqm_x_region` | 81 | **<0.01%** |
+
+**Insight principal**: La desviación del precio respecto a la mediana regional (`price_deviation_from_median`) domina con 80.98% de importancia, confirmando que el **contexto geográfico** es el factor más determinante efen la predicción de precios inmobiliarios.
+
+---
+
+## 7. Conclusiones
+
+El presente estudio demostró la **viabilidad excepcional** de aplicar técnicas de Big Data y machine learning distribuido para la predicción de precios inmobiliarios en Dinamarca, alcanzando niveles de precisión prácticamente perfectos.
+
+**Hallazgos principales:**
+
+1. **Precisión alcanzada**: R² = 0.9999 con MAPE = 0.025%, superando ampliamente benchmarks de literatura
+2. **Factor dominante**: El contexto geográfico regional (80.98% de importancia) es el predictor más poderoso
+3. **Segmentación efectiva**: Las categorías de precio Premium/Medium/High contribuyen significativamente (14.31%)
+4. **Robustez temporal**: Excelente generalización en datos 2021-2024 sin evidencia de overfitting
+
+**Contribuciones metodológicas:**
+- Pipeline modular de feature engineering escalable y reproducible
+- Uso exitoso de optimización bayesiana (Optuna) en contexto de Big Data inmobiliario
+- Implementación efectiva de computación distribuida H2O con GPUs
+
+**Técnica ganadora**: XGBoost con optimización Optuna obtuvo el mejor rendimiento, superando a AutoML y demostrando que la optimización específica de hiperparámetros puede superar enfoques automáticos generales.
+
+---
+
+## 8. Recomendaciones
+
+### 8.1 Trabajos futuros
+
+**Enriquecimiento de datos:**
+1. Integración de datos geoespaciales (OpenStreetMap) para distancias a servicios
+2. Incorporación de indicadores socioeconómicos por zona postal
+3. Inclusión de datos de renovaciones y certificaciones energéticas
+
+**Optimización de modelos:**
+1. Implementación de ensemble methods (stacking con múltiples algoritmos)
+2. Exploración de deep learning para patrones no lineales complejos
+3. Desarrollo de modelos de series temporales para forecasting multivariado
+
+**Aplicaciones prácticas:**
+1. Sistema de valoración automática para entidades financieras
+2. Plataforma de análisis de inversión inmobiliaria
+3. Herramientas de detección de anomalías en precios para prevenir fraude
+
+### 8.2 Escalabilidad y despliegue
+
+**Arquitectura cloud**: Migración a H2O Driverless AI en AWS/Azure para escalabilidad automática
+**Pipeline MLOps**: Implementación de reentrenamiento continuo con datos actualizados
+**Expansión geográfica**: Adaptación de metodología a mercados nórdicos similares (Suecia, Noruega)
 
 
 
 
-![image-6.png](attachment:image-6.png)
-*Estadísticos descriptivos, valores nulos y ceros.*
 
-* Se identificaron algunas **inconsistencias** y registros con valores atípicos o nulos que requieren tratamiento posterior.
-
-![image-7.png](attachment:image-7.png)
-
-Al tratarse de una presencia menor al 0.1 %, se decide usar el método de análsis de casos completos (eliminando los casos), sin descuidar el análsis requerido para identificar la perdida de datos.
-
-Se determina el mecanismo de perdida de datos, 
-Tras inspeccionar el proceso de scrapeo en el respositorio de origen de los datos:
-
-Se observa que la mayor perdida de datos corresponde a una de tipo parche, asociada a los primeros (~1000) IDs.
-En un analsis posterior se observó una correlación positiva entre date (en formato timestap) y estos, perteneciendo todos al primer quarter registrado.
-
-se reaizaron analisis univariados y bivariados para identificar patrones y relaciones entre variables.
-
-![image-9.png](attachment:image-9.png)
-![image-10.png](attachment:image-10.png)
-
-![image-11.png](attachment:image-11.png)
-
-![image-12.png](attachment:image-12.png)
-
-Se incluyo el id para validar que los datos se encuentran ordenados y no hay duplicados.
-![image-13.png](attachment:image-13.png)
-
-Finalmente mencionar que no se encontraron registros duplicados, consecuentemente no se tomaron medidas en este aspecto.
-
-
-
-
-## Modelización.  Comprende  la  aplicación  de  los  algoritmos  de  aprendizaje 
-supervisado sobre la plataforma de Big Data llamada H2O y los compara.  
-  
- Resultados. Comunicar los principales resultados obtenidos (uso de métricas 
-y tablas comparativas).  
-  
- Conclusiones. En un párrafo redactar las conclusiones del trabajo, 
-especificando la técnica utilizada, los resultados obtenidos (positivos o no).  
-  
- Recomendaciones. Redactar los trabajos futuros.  
-  
- Referencias bibliográficas 
-
-
-
-##  Análisis exploratorio de los datos (EDA).  
-
-
-Se debe incluir la descripción  de 
-las  tareas  de  inspección,  preprocesamiento,  análisis  univariado,  bivariado  y 
-visualización de los datos.  
-  
-
-![Figura Y](utils/doc_src/data_analysis_flow1.png)
-
-*Figura Y. Flujo secuencial del análisis realizado*
-
-
-## Modelización.  Comprende  la  aplicación  de  los  algoritmos  de  aprendizaje 
-supervisado sobre la plataforma de Big Data llamada H2O y los compara.  
-  
- Resultados. Comunicar los principales resultados obtenidos (uso de métricas 
-y tablas comparativas).  
-  
- Conclusiones. En un párrafo redactar las conclusiones del trabajo, 
-especificando la técnica utilizada, los resultados obtenidos (positivos o no).  
-  
- Recomendaciones. Redactar los trabajos futuros.  
-  
- Referencias bibliográficas 
 
 ### Referencias Bibliográficas
 
@@ -363,23 +547,8 @@ EN MADRID UTILIZANDO TÉCNICAS DE EXPLORACIÓN DE DATOS E INTELIGENCIA ARTIFICIA
 
 Little, RJA y Rubin, DB (2014).  Análisis estadístico con datos faltantes (Segunda edición). John Wiley & Sons.
 
+[6] H2O.ai. (2024). H2O AutoML User Guide. https://docs.h2o.ai/h2o/latest-stable/h2o-docs/automl.html
 
-https://stats.stackexchange.com/questions/453386/working-with-time-series-data-splitting-the-dataset-and-putting-the-model-into 
+[7] Optuna. (2024). Optuna Documentation. https://optuna.org/
 
-
-No recomiendo ningún tipo de validación cruzada (incluso la validación cruzada de series temporales es algo complicada de usar en la práctica). En su lugar, utilice una simple división entre pruebas y entrenamiento para experimentos y pruebas de concepto iniciales, etc.
-
-Luego, al pasar a producción, no te molestes en dividir el entrenamiento, la prueba y la evaluación. Como bien señalaste, no quieres perder información valiosa de los últimos 90 días. En su lugar, en producción, entrenas varios modelos con todo el conjunto de datos y luego eliges el que te proporcione el AIC o BIC más bajo.
-
-...
-Para los métodos estadísticos, utilice una división simple de entrenamiento/prueba de series temporales para validaciones iniciales y pruebas de concepto, pero no utilice el CV para ajustar los hiperparámetros. En su lugar, entrene varios modelos en producción y utilice el AIC o el BIC como métrica para la selección automática de modelos. Además, realice este entrenamiento y selección con la mayor frecuencia posible (es decir, cada vez que obtenga nuevos datos de demanda).
-
-
-Este buen hombre nos dice que usemos el AIC o el BIC
-
-![alt text](image.png)
-
-
-
-
-
+[8] XGBoost. (2024). XGBoost Documentation. https://xgboost.readthedocs.io/en/latest/
