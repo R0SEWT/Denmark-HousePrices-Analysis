@@ -83,6 +83,15 @@ _- Fuentes primarias del dataset de Kaggle (repositorio de Martin Frederiksen)_
 | 16  | `nom_interest_rate%`                           | Tasa de interés nominal danesa por trimestre (no convertida a formato trimestral)                  | —                                        |
 | 17  | `dk_ann_infl_rate%`                            | Tasa de inflación anual danesa por trimestre (no convertida)                                       | —                                        |
 | 18  | `yield_on_mortgage_credit_bonds%`              | Tasa de bonos hipotecarios a 30 años (sin spread)                                                   | —                                        |
+<p align="center">
+  <img src="utils/doc_src/distribucion_de_categorias_por_tipo.png" alt="Figura V" />
+</p>
+
+<p align="center"><em>Figura V. Distribución de categorías por tipo</em></p>
+
+
+Se observa que la mayoría de las columnas contienen datos **numéricos**, lo cual es favorable para su análisis y posterior modelado.
+
 
 ---
 
@@ -173,26 +182,96 @@ Los datos fueron cargados mediante `h2o.import_file()`, una función que permite
 | Nodo 2 | AMD Ryzen 5 7600X| 16 GB DDR5   | RTX 4060 Ti (16 GB)   |
 
 
-![image-5.png](attachment:image-5.png)
+<p align="center">
+  <img src="utils/doc_src/carga_inicial.png" alt="Figura V" />
+</p>
 
+<p align="center"><em>Figura X. Inicialización del clúster distribuido en H2O</em></p>
 
 
 *Resumen del dataset: número de registros, columnas y dimensiones generales.*
 
+*Análisis del uso de memoria.*
+
+* Se valida que el tamaño del dataset es considerable, pero no excede la capacidad de carga en memoria disponible.
+
 * El conjunto presenta una estructura manejable desde el punto de vista computacional, a pesar de su volumen.
+
+
+
+
+#### 3.2.1.2 Análisis preliminar de los datos
+
+h2o.describe(chunk_summary=True) permite obtener un resumen estadístico de las variables numéricas, incluyendo conteos, medias, desviaciones estándar, valores mínimos y máximos, zeros y valores faltantes, asi como una pequeña muestra (`head`) de los datos.
+
+
+| Column       | Type   | Min        | Max        | Mean        | Std Dev       | Missing | Zeros |
+|--------------|--------|------------|------------|-------------|---------------|---------|--------|
+| `date`       | int    | 6.95e+17   | 1.73e+18   | 1.35e+18     | 2.85e+17       | 0       | 0      |
+| `quarter`    | int    | 88         | 219        | 170.70       | 36.18          | 0       | 0      |
+| `house_id`   | int    | 0          | 15,079,070 | 753,953.5    | 435,295.7      | 0       | 1      |
+
+...
+---
+
+##### 3.2.1.2.1 Observaciones iniciales
+
+El análisis descriptivo permite identificar algunas variables con valores atípicos o inconsistencias que podrían afectar el modelo si no se tratan adecuadamente:
+
+* **`%_change_between_offer_and_purchase`**
+  Contiene valores negativos y **966,554 ceros (\~64%)**. Posibles explicaciones:
+
+  * H₀: Primera venta (sin precio anterior de referencia)
+  * H₁: Información faltante o no registrada
+  * H₂: Venta al mismo precio que el valor ofertado
+
+* **`year_build`**
+  Rango de **1000 a 2024**, con media ≈ 1954. Se recomienda filtrar construcciones previas a 1800 por ser poco realistas.
+
+* **`purchase_price`**
+  Valores entre **DKK 250,000 y más de DKK 46 millones**, lo que sugiere revisar posibles *outliers* con histogramas y escala logarítmica.
+
+* **`sqm_price`**
+  Rango entre **269 y 75,000**, lo que podría indicar errores o propiedades atípicas que requieren verificación.
+
+---
+
+##### 3.2.1.2.2 Medidas correctivas propuestas
+
+1. **Filtrar `year_build`** con un umbral mínimo (ej. ≥1800).
+2. **Eliminar valores faltantes**, ya que son pocos y no comprometen el análisis.
+3. **Detectar y eliminar duplicados** en base a `house_id` y `date`.
+4. **Analizar outliers** en `purchase_price`, `sqm` y `sqm_price` con histogramas (usar log-scale si es necesario).
+5. **Convertir `date` a formato legible**, derivando una nueva columna de tipo fecha a partir del timestamp original.
+
+
+#### 3.2.1.3 Tratamiento de datos faltantes y duplicados
+
+#### 3.2.1.3.1 Analisis y tratamiento de datos faltantes
+
+#### 3.2.1.3.1.1 Identificación y tratamiento
+
+<!-- Foto del análisis de datos faltantes -->
+
+Los datos faltantes fueron separados para su análisis posterior, ya que representan menos del 0.1% del total de registros. Se optó por el método de análisis de casos completos, eliminando los casos con datos faltantes sin afectar significativamente el conjunto de datos.
+
+
+#### 3.2.1.3.1.1 Analisis de datos faltantes
+
+Se observó que la mayoría de los datos faltantes están asociados a un periodo de tiempo específico (quarter), lo que indica un patrón de ausencia no aleatorio. En este caso, los datos faltantes podrían clasificarse como Missing Not At Random (MNAR), ya que su presencia depende de una variable observada (el tiempo) o no observada (como cambios en el sistema de registro en ese trimestre), siguiendo la clasificación de Little y Rubin (1987).
+
 
 ![image-3.png](attachment:image-3.png)
 
 *Distribución de tipos de datos presentes en las columnas.*
 
-* Se observa que la mayoría de las columnas contienen datos **numéricos**, lo cual es favorable para su análisis y posterior modelado.
+
+#### 3.2.1.3.  
 
 ![image-2.png](attachment:image-2.png)
 
 
-*Análisis del uso de memoria.*
 
-* Se valida que el tamaño del dataset es considerable, pero no excede la capacidad de carga en memoria disponible.
 
 ![image-6.png](attachment:image-6.png)
 *Estadísticos descriptivos, valores nulos y ceros.*
@@ -282,6 +361,9 @@ EN MADRID UTILIZANDO TÉCNICAS DE EXPLORACIÓN DE DATOS E INTELIGENCIA ARTIFICIA
 [5] Copper, A. (2021).Explaining Machine Learning Models: A Non-Technical Guide to Interpreting SHAP Analyses. Aidan Cooper. https://www.aidancooper.co.uk/a-non-technical-guide-to-interpreting-shap-analyses
 
 
+Little, RJA y Rubin, DB (2014).  Análisis estadístico con datos faltantes (Segunda edición). John Wiley & Sons.
+
+
 https://stats.stackexchange.com/questions/453386/working-with-time-series-data-splitting-the-dataset-and-putting-the-model-into 
 
 
@@ -296,3 +378,8 @@ Para los métodos estadísticos, utilice una división simple de entrenamiento/p
 Este buen hombre nos dice que usemos el AIC o el BIC
 
 ![alt text](image.png)
+
+
+
+
+
