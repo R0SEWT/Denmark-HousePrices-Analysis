@@ -24,7 +24,7 @@ El conjunto de datos utilizado proviene de la plataforma Kaggle (aporte de Marti
 
 * La recolección se llevó a cabo usando **scripts en Python**, ejecutados en notebooks Jupyter del repositorio público del autor.
 
-![Fuentes primarias del dataset de kaggle](../utils/doc_src/fuentes_primarias.png)
+![Fuentes primarias del dataset de kaggle](doc/src/fuentes_primarias.png)
 _- Fuentes primarias del dataset de Kaggle (repositorio de Martin Frederiksen)_
 
 ### 2.2 Proceso de limpieza y estructuración
@@ -84,7 +84,7 @@ _- Fuentes primarias del dataset de Kaggle (repositorio de Martin Frederiksen)_
 | 17  | `dk_ann_infl_rate%`                            | Tasa de inflación anual danesa por trimestre (no convertida)                                       | —                                        |
 | 18  | `yield_on_mortgage_credit_bonds%`              | Tasa de bonos hipotecarios a 30 años (sin spread)                                                   | —                                        |
 <p align="center">
-  <img src="utils/doc_src/distribucion_de_categoria_por_tipo.png" alt="Figura V" />
+  <img src="doc/src/distribucion_de_categoria_por_tipo.png" alt="Figura V" />
 </p>
 
 <p align="center"><em>Figura V. Distribución de categorías por tipo</em></p>
@@ -135,7 +135,7 @@ Desarrollar un análisis exploratorio (EDA) y un modelo predictivo explicable de
   * Detección de anomalías sobre residuales de series temporales
 
 <p align="center">
-  <img src="utils/doc_src/data_pipeline_overview.png" alt="Figura V" />
+  <img src="doc/src/data_pipeline_overview.png" alt="Figura V" />
 </p>
 
 <p align="center"><em>Figura V. Data Pipeline para el análisis y predicción de precios de vivienda</em></p>
@@ -145,7 +145,7 @@ Desarrollar un análisis exploratorio (EDA) y un modelo predictivo explicable de
 ## Analisis de datos
 
 <p align="center">
-  <img src="utils/doc_src/data_analysis_flow_complete.png" alt="Figura V" />
+  <img src="doc/src/data_analysis_flow_complete.png" alt="Figura V" />
 </p>
 
 <p align="center"><em>Figura X. Flujo de trabajo general del análisis de datos y predicción de precios con tareas proyectadas (TBD)</em></p>
@@ -156,7 +156,7 @@ Desarrollar un análisis exploratorio (EDA) y un modelo predictivo explicable de
 
 #### 3.2.1.1 Carga del dataset
 <p align="center">
-  <img src="utils/doc_src/cluster_visualise.png" alt="Figura V" />
+  <img src="doc/src/cluster_visualise.png" alt="Figura V" />
 </p>
 
 <p align="center"><em>Figura X. Iniciacion de cluster H2O</em></p>
@@ -166,7 +166,7 @@ Desarrollar un análisis exploratorio (EDA) y un modelo predictivo explicable de
 Para lograrlo, se realizó una carga distribuida del dataset en un clúster H2O con dos nodos de cómputo, lo que permitió manejar eficientemente el volumen de datos y realizar análisis complejos sin comprometer el rendimiento.
 
 <p align="center">
-  <img src="utils/doc_src/cluster.png" alt="Figura V" />
+  <img src="doc/src/cluster.png" alt="Figura V" />
 </p>
 
 <p align="center"><em>Figura X. Inicialización del clúster distribuido en H2O</em></p>
@@ -183,7 +183,7 @@ Los datos fueron cargados mediante `h2o.import_file()`, una función que permite
 
 
 <p align="center">
-  <img src="utils/doc_src/carga_inicial.png" alt="Figura V" />
+  <img src="doc/src/carga_inicial.png" alt="Figura V" />
 </p>
 
 <p align="center"><em>Figura X. Inicialización del clúster distribuido en H2O</em></p>
@@ -398,15 +398,25 @@ Se aplicó un **proceso híbrido de selección** combinando múltiples métricas
 ### 5.2 División temporal de datos
 
 **Estrategia aplicada**: Split temporal respetando naturaleza de series temporales
-- **Entrenamiento**: 1992-2020 (892,904 registros, 80%)
-- **Prueba**: 2021-2024 (613,479 registros, 20%)
+- **Entrenamiento**: 1992-2017 (892,904 registros, 80%)
+- **Prueba**: 2018-2024 (613,479 registros, 20%)
+
+![alt text](image-1.png)
 
 Esta división evita *data leakage* y simula condiciones reales de predicción.
+
+![alt text](image-2.png)
 
 **Limpieza y exclusión de variables:**
 - **Variables eliminadas manualmente**: `quarter`, `region_count`, `time_trend`, `region_target_encoded` por redundancia y riesgo de data leakage
 - **Variable eliminada automáticamente por H2O**: `phase_covid_era` detectada como constante durante entrenamiento
-- **Verificación de colinealidad**: Confirmada ausencia de correlaciones altas (>0.8) entre variables finales
+- **Verificación de colinealidad**: 
+
+![alt text](image-3.png)
+Confirmada ausencia de correlaciones altas (>0.8) entre variables finales
+
+![alt text](image-4.png)
+
 - **Escalamiento**: StandardScaler aplicado para homogenizar escalas numéricas
 
 ### 5.3 Algoritmos implementados
