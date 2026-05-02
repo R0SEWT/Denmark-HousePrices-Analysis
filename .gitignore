@@ -180,7 +180,7 @@ cache/
 tests/
 !tests/
 tests/*
-!tests/test_rolling_causal.py
+!tests/test_*.py
 results/
 
 # Beads / Dolt files (added by bd init)
