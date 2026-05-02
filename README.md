@@ -2,6 +2,29 @@
 
 Kaggle dataset: [Danish Residential Housing Prices 1992-2024](https://www.kaggle.com/datasets/martinfrederiksen/danish-residential-housing-prices-1992-2024/data) 
 
+## Entorno (uv)
+
+Este repo usa `uv` para gestionar dependencias (vía `pyproject.toml`).
+
+1) Instalar `uv` (una vez, en tu máquina):
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+2) Crear el entorno virtual e instalar dependencias:
+
+```bash
+uv venv
+uv sync --all-extras
+```
+
+3) Generar/actualizar el lockfile (opcional, recomendado):
+
+```bash
+uv lock
+```
+
 
 ## 1. Descripción del caso de uso
 
