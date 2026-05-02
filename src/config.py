@@ -150,3 +150,27 @@ EVALUATION_METRICS = [
     "mape", 
     "medae"
 ]
+
+# ============================================
+# FEATURE ENGINEERING TEMPORAL (RFE-01)
+# Ventana rolling causal para agregaciones regionales
+# ============================================
+
+ROLLING_WINDOW_YEARS = 3
+"""Numero de anios previos [year - k, year - 1] para agregaciones regionales causales."""
+
+MIN_OBS_PER_WINDOW = 20
+"""Minimo de observaciones en la ventana para emitir valor; si no, NaN."""
+
+# ============================================
+# WALK-FORWARD CROSS-VALIDATION (RFE-01)
+# Folds: train [1992, Y] / val [Y+1] para Y en [MIN, MAX]
+# Holdout final: anios >= HOLDOUT_START_YEAR
+# ============================================
+
+CV_MIN_TRAIN_END_YEAR = 2013
+CV_MAX_TRAIN_END_YEAR = 2021
+HOLDOUT_START_YEAR = 2023
+
+OPTUNA_STUDY_NAME_V2 = "h2o_xgb_walkforward_v1"
+"""Nombre del study Optuna posterior al fix de leak."""
