@@ -174,3 +174,35 @@ HOLDOUT_START_YEAR = 2023
 
 OPTUNA_STUDY_NAME_V2 = "h2o_xgb_walkforward_v1"
 """Nombre del study Optuna posterior al fix de leak."""
+
+# ============================================
+# MEDALLION ARCHITECTURE (MED-A1)
+# Capas Bronze → Silver → Gold para pipeline analítico
+# ============================================
+
+BRONZE_DIR = DATA_DIR / "bronze"
+SILVER_DIR = DATA_DIR / "silver"
+GOLD_DIR = DATA_DIR / "gold"
+HYPER_DIR = DATA_DIR / "hyper"
+MEDALLION_METADATA_DIR = DATA_DIR / "medallion_metadata"
+
+POSTAL_CENTROIDS_FILE = SILVER_DIR / "postal_centroids.parquet"
+CPI_INDEX_FILE = SILVER_DIR / "cpi_index.parquet"
+STL_COMPONENTS_FILE = SILVER_DIR / "stl_components.parquet"
+
+# ============================================
+# ANALYTICS CONVENTIONS (MED-A1)
+# Constantes para KPIs del dashboard Tableau
+# ============================================
+
+CPI_BASE_YEAR = 2024
+BASE_INDEX_YEAR = 1992
+LOW_SAMPLE_THRESHOLD = 50
+MACRO_SHOCK_YEARS = [1995, 2008, 2020, 2022]
+FAMILY_SALE_TYPES = ["-", "Familiehandel"]
+
+ROLLING_VOLATILITY_4Q = 4
+ROLLING_VOLATILITY_8Q = 8
+BOND_ELASTICITY_LAGS = [0, 1, 2]
+
+DAWA_POSTNUMRE_URL = "https://api.dataforsyningen.dk/postnumre"
