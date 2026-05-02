@@ -1,0 +1,34 @@
+[project]
+name = "denmark-houseprices-analysis"
+version = "0.0.0"
+description = "Análisis exploratorio y modelado predictivo de precios residenciales en Dinamarca (1992–2024)"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+
+# Dependencias usadas por src/, tests/ y notebooks/
+dependencies = [
+  "numpy",
+  "pandas",
+  "matplotlib",
+  "seaborn",
+  "scipy",
+  "pyarrow",
+  "h2o",
+  "optuna",
+  "scikit-learn",
+  "wordcloud",
+  "ipython",
+  "kaggle",
+]
+
+[project.optional-dependencies]
+# Herramientas para desarrollo local y ejecución de notebooks
+# (Se instalan con: uv sync --extra dev  |  uv sync --all-extras)
+dev = [
+  "pytest",
+  "ipykernel",
+  "jupyter",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"

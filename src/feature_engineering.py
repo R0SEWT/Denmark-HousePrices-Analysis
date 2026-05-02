@@ -54,6 +54,61 @@ FEATURE_ENGINEERING_CONFIG = {
     }
 }
 
+try:
+    from config import (
+        CV_MAX_TRAIN_END_YEAR,
+        CV_MIN_TRAIN_END_YEAR,
+        HOLDOUT_START_YEAR,
+        MIN_OBS_PER_WINDOW,
+        OPTUNA_STUDY_NAME_V2,
+        ROLLING_WINDOW_YEARS,
+    )
+except ImportError:  # pragma: no cover - soporte para import como paquete
+    from .config import (
+        CV_MAX_TRAIN_END_YEAR,
+        CV_MIN_TRAIN_END_YEAR,
+        HOLDOUT_START_YEAR,
+        MIN_OBS_PER_WINDOW,
+        OPTUNA_STUDY_NAME_V2,
+        ROLLING_WINDOW_YEARS,
+    )
+
+MODEL_TARGET_COL = 'log_price'
+ROLLING_FEATURE_COLUMNS = [
+    'rolling_regional_mean',
+    'rolling_regional_median',
+    'rolling_regional_std',
+    'rolling_regional_cv',
+    'rolling_regional_count',
+    'rolling_regional_p90',
+]
+CAUSAL_DERIVED_COLUMNS = [
+    'is_premium_causal',
+    'price_deviation_from_rolling_median',
+]
+ROLLING_AUXILIARY_COLUMNS = ['rolling_regional_median_v2']
+NON_IMPUTED_FEATURE_COLUMNS = set(ROLLING_FEATURE_COLUMNS + CAUSAL_DERIVED_COLUMNS)
+FORBIDDEN_FEATURE_COLUMNS = {
+    'purchase_price',
+    'price_per_sqm',
+    'price_zscore',
+    'price_category',
+    'price_per_sqm_x_region',
+    'sqm_x_region',
+    'is_premium',
+    'price_deviation_from_median',
+    'region_target_encoded',
+    'regional_price_mean',
+    'regional_price_median',
+    'regional_price_std',
+    'regional_price_cv',
+    'regional_price_rank',
+    'regional_transaction_count',
+    'regional_liquidity_score',
+    'regional_p90',
+    'regional_median',
+}
+
 # Importaciones dinámicas para visualización
 def _import_viz_libraries():
     """Importa bibliotecas de visualización dinámicamente"""
@@ -196,7 +251,7 @@ def create_property_age_features(df: pd.DataFrame,
 def create_price_derived_features(df: pd.DataFrame, 
                                  price_col: str = 'purchase_price') -> pd.DataFrame:
     """
-    Crea variables derivadas de precio
+    DEPRECADO: usa create_price_features.
     
     Args:
         df: DataFrame con datos
@@ -205,48 +260,12 @@ def create_price_derived_features(df: pd.DataFrame,
     Returns:
         DataFrame con variables de precio derivadas
     """
-    print("💰 Creando features derivadas de precio...")
-    
-    df_result = df.copy()
-    
-    # Log de precios (para normalizar distribución)
-    df_result['log_price'] = np.log1p(df_result[price_col])
-    
-    # Precio relativo a la mediana regional (si existe columna region)
-    if 'region' in df_result.columns:
-        regional_median = df_result.groupby('region')[price_col].median()
-        df_result['price_ratio_regional_median'] = df_result.apply(
-            lambda row: row[price_col] / regional_median[row['region']], axis=1
-        )
-    
-    # Categorías de precio basadas en percentiles
-    price_percentiles = df_result[price_col].quantile([0.25, 0.5, 0.75, 0.9])
-    
-    def categorize_price(price):
-        if price <= price_percentiles[0.25]:
-            return 'Budget'
-        elif price <= price_percentiles[0.5]:
-            return 'Economic'
-        elif price <= price_percentiles[0.75]:
-            return 'Mid-Range'
-        elif price <= price_percentiles[0.9]:
-            return 'Premium'
-        else:
-            return 'Luxury'
-    
-    df_result['price_category'] = df_result[price_col].apply(categorize_price)
-    
-    # Z-score de precios por región
-    if 'region' in df_result.columns:
-        df_result['price_zscore_region'] = df_result.groupby('region')[price_col].transform(
-            lambda x: (x - x.mean()) / x.std()
-        )
-    
-    # Percentiles de precio
-    df_result['price_percentile'] = df_result[price_col].rank(pct=True)
-    
-    print(f"✅ Creadas {5} nuevas variables de precio")
-    return df_result
+    warnings.warn(
+        "create_price_derived_features esta deprecada; usar create_price_features",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return create_price_features(df, target_col=price_col)
 
 def create_size_derived_features(df: pd.DataFrame,
                                 sqm_col: str = 'sqm',
@@ -738,50 +757,165 @@ def create_macroeconomic_features(df: pd.DataFrame,
     
     return df_result
 
-def create_geographic_aggregated_features(df: pd.DataFrame,
-                                        region_col: str = 'region',
-                                        price_col: str = 'purchase_price',
-                                        window: int = 12) -> pd.DataFrame:
+def _compute_rolling_window_stats(
+    region_frame: pd.DataFrame,
+    year_col: str,
+    price_col: str,
+    year_ref: int,
+    window_years: int,
+    min_obs: int,
+) -> Dict[str, Any]:
+    """Calcula estadísticos exactos sobre la ventana causal [year-k, year-1]."""
+    window_mask = (
+        (region_frame[year_col] >= year_ref - window_years) &
+        (region_frame[year_col] <= year_ref - 1)
+    )
+    window_prices = region_frame.loc[window_mask, price_col].dropna()
+    obs_count = int(window_prices.shape[0])
+
+    if obs_count < min_obs:
+        return {
+            'rolling_regional_mean': np.nan,
+            'rolling_regional_median': np.nan,
+            'rolling_regional_std': np.nan,
+            'rolling_regional_cv': np.nan,
+            'rolling_regional_count': obs_count,
+            'rolling_regional_p90': np.nan,
+        }
+
+    mean_value = float(window_prices.mean())
+    std_value = float(window_prices.std(ddof=1)) if obs_count > 1 else 0.0
+    return {
+        'rolling_regional_mean': mean_value,
+        'rolling_regional_median': float(window_prices.median()),
+        'rolling_regional_std': std_value,
+        'rolling_regional_cv': std_value / mean_value if mean_value else np.nan,
+        'rolling_regional_count': obs_count,
+        'rolling_regional_p90': float(window_prices.quantile(0.9)),
+    }
+
+
+def create_rolling_regional_features(
+    df: pd.DataFrame,
+    region_col: str = 'region',
+    price_col: str = 'purchase_price',
+    year_col: str = 'year',
+    window_years: Optional[int] = None,
+    min_obs: Optional[int] = None,
+) -> pd.DataFrame:
     """
-    Crea variables geográficas agregadas
-    
-    Args:
-        df: DataFrame con datos
-        region_col: Columna de región
-        price_col: Columna de precio
-        window: Ventana para rolling statistics
-    
-    Returns:
-        DataFrame con variables geográficas agregadas
+    Crea agregados regionales causales usando solo datos de años anteriores.
+
+    Para cada fila del año y se usan únicamente transacciones con años en
+    [y - window_years, y - 1] dentro de la misma región.
     """
-    print(f"🗺️ Creando features geográficas agregadas...")
-    
+    if window_years is None:
+        window_years = ROLLING_WINDOW_YEARS
+    if min_obs is None:
+        min_obs = MIN_OBS_PER_WINDOW
+
+    required_cols = {region_col, price_col, year_col}
+    missing_cols = required_cols - set(df.columns)
+    if missing_cols:
+        raise ValueError(f"Faltan columnas para rolling regional: {sorted(missing_cols)}")
+
+    print(
+        "🔄 Creando features regionales causales "
+        f"(ventana={window_years} anios, min_obs={min_obs})..."
+    )
+
     df_result = df.copy()
-    
-    # Precio promedio regional (rolling window)
-    if region_col in df_result.columns:
-        regional_stats = df_result.groupby(region_col)[price_col].agg([
-            'mean', 'median', 'std', 'count'
-        ]).reset_index()
-        regional_stats.columns = [region_col, 'regional_price_mean', 
-                                'regional_price_median', 'regional_price_std',
-                                'regional_transaction_count']
-        
-        df_result = df_result.merge(regional_stats, on=region_col, how='left')
-        
-        # Volatilidad regional
-        df_result['regional_price_cv'] = (df_result['regional_price_std'] / 
-                                        df_result['regional_price_mean'])
-        
-        # Ranking regional dinámico
-        df_result['regional_price_rank'] = df_result['regional_price_mean'].rank(pct=True)
-        
-        # Liquidez regional (transacciones)
-        df_result['regional_liquidity_score'] = df_result['regional_transaction_count'].rank(pct=True)
-        
-        print(f"  ✅ Variables agregadas para {df_result[region_col].nunique()} regiones")
-    
+    existing_rolling = [col for col in ROLLING_FEATURE_COLUMNS if col in df_result.columns]
+    if existing_rolling:
+        df_result = df_result.drop(columns=existing_rolling)
+    base_pairs = (
+        df_result[[region_col, year_col]]
+        .dropna()
+        .drop_duplicates()
+        .sort_values([region_col, year_col])
+    )
+
+    records: List[Dict[str, Any]] = []
+    for region_value, region_frame in df_result[[region_col, year_col, price_col]].groupby(region_col):
+        region_frame = region_frame.sort_values(year_col)
+        candidate_years = (
+            base_pairs.loc[base_pairs[region_col] == region_value, year_col]
+            .dropna()
+            .astype(int)
+            .tolist()
+        )
+        for year_ref in candidate_years:
+            stats = _compute_rolling_window_stats(
+                region_frame=region_frame,
+                year_col=year_col,
+                price_col=price_col,
+                year_ref=year_ref,
+                window_years=window_years,
+                min_obs=min_obs,
+            )
+            records.append({
+                region_col: region_value,
+                year_col: int(year_ref),
+                **stats,
+            })
+
+    rolling_df = pd.DataFrame.from_records(records)
+    df_result = df_result.merge(rolling_df, on=[region_col, year_col], how='left')
+
+    n_nan = df_result['rolling_regional_mean'].isna().sum()
+    print(f"  ✅ Features rolling aplicadas a {df_result.shape[0]:,} filas; {n_nan:,} NaN")
     return df_result
+
+
+def create_geographic_aggregated_features(
+    df: pd.DataFrame,
+    region_col: str = 'region',
+    price_col: str = 'purchase_price',
+    window: int = 12,
+) -> pd.DataFrame:
+    """
+    DEPRECADO (RFE-02): usa create_rolling_regional_features.
+    """
+    warnings.warn(
+        "create_geographic_aggregated_features es no-canonica; "
+        "usar create_rolling_regional_features",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return create_rolling_regional_features(
+        df,
+        region_col=region_col,
+        price_col=price_col,
+        year_col='year',
+        window_years=window,
+    )
+
+
+def create_regional_aggregated_features(
+    df: pd.DataFrame,
+    region_col: str = 'region',
+    price_col: str = 'purchase_price',
+    year_col: str = 'year',
+    window_years: Optional[int] = None,
+    min_obs: Optional[int] = None,
+) -> pd.DataFrame:
+    """
+    DEPRECADO (RFE-02): alias legacy hacia create_rolling_regional_features.
+    """
+    warnings.warn(
+        "create_regional_aggregated_features es no-canonica; "
+        "usar create_rolling_regional_features",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return create_rolling_regional_features(
+        df,
+        region_col=region_col,
+        price_col=price_col,
+        year_col=year_col,
+        window_years=window_years,
+        min_obs=min_obs,
+    )
 
 # ===== SECCIÓN 5: SELECCIÓN DE FEATURES =====
 
@@ -1087,40 +1221,25 @@ def create_temporal_features(df: pd.DataFrame, date_col: str = 'date', year_buil
     print(f"✅ Variables temporales creadas: {temporal_vars}")
     return df_temp
 
-def create_price_features(df: pd.DataFrame, target_col: str = 'purchase_price', sqm_col: str = 'sqm') -> pd.DataFrame:
+def create_price_features(df: pd.DataFrame, target_col: str = 'purchase_price') -> pd.DataFrame:
     """
-    Crea variables derivadas de precio
+    Crea solo el target transformado para modelado.
     
     Args:
         df: DataFrame de entrada
         target_col: Nombre de la columna de precio objetivo
-        sqm_col: Nombre de la columna de metros cuadrados
         
     Returns:
-        DataFrame con variables de precio añadidas
+        DataFrame con la columna log_price añadida
     """
     print("💰 Creando variables de precio...")
     
     df_price = df.copy()
     
     # Log de precios (para normalizar distribución)
-    df_price['log_price'] = np.log1p(df_price[target_col])
-    
-    # Precio por m² (recalculado para consistencia)
-    df_price['price_per_sqm'] = df_price[target_col] / df_price[sqm_col]
-    
-    # Categorías de precio basadas en cuartiles
-    price_quartiles = df_price[target_col].quantile([0.25, 0.5, 0.75])
-    df_price['price_category'] = pd.cut(df_price[target_col], 
-                                       bins=[0, price_quartiles[0.25], price_quartiles[0.5], 
-                                            price_quartiles[0.75], df_price[target_col].max()],
-                                       labels=['Low', 'Medium', 'High', 'Premium'])
-    
-    # Z-score de precios (para detectar outliers)
-    df_price['price_zscore'] = (df_price[target_col] - df_price[target_col].mean()) / df_price[target_col].std()
-    
-    price_vars = ['log_price', 'price_per_sqm', 'price_category', 'price_zscore']
-    print(f"✅ Variables de precio creadas: {price_vars}")
+    df_price[MODEL_TARGET_COL] = np.log1p(df_price[target_col])
+
+    print(f"✅ Variables de precio creadas: ['{MODEL_TARGET_COL}']")
     return df_price
 
 def create_size_features(df: pd.DataFrame, sqm_col: str = 'sqm', rooms_col: str = 'no_rooms') -> pd.DataFrame:
@@ -1140,15 +1259,26 @@ def create_size_features(df: pd.DataFrame, sqm_col: str = 'sqm', rooms_col: str 
     df_size = df.copy()
     
     # Categorías de habitaciones
-    df_size['rooms_category'] = pd.cut(df_size[rooms_col], 
-                                      bins=[0, 2, 4, 6, df_size[rooms_col].max()],
-                                      labels=['Small', 'Medium', 'Large', 'XLarge'])
+    df_size['rooms_category'] = pd.cut(
+        df_size[rooms_col],
+        bins=[-np.inf, 2, 4, 6, np.inf],
+        labels=['Small', 'Medium', 'Large', 'XLarge'],
+    )
     
     # Categorías de tamaño por m²
     sqm_quartiles = df_size[sqm_col].quantile([0.33, 0.67])
-    df_size['size_category'] = pd.cut(df_size[sqm_col],
-                                     bins=[0, sqm_quartiles[0.33], sqm_quartiles[0.67], df_size[sqm_col].max()],
-                                     labels=['Small', 'Medium', 'Large'])
+    if sqm_quartiles[0.33] >= sqm_quartiles[0.67]:
+        df_size['size_category'] = pd.qcut(
+            df_size[sqm_col].rank(method='first'),
+            q=3,
+            labels=['Small', 'Medium', 'Large'],
+        )
+    else:
+        df_size['size_category'] = pd.cut(
+            df_size[sqm_col],
+            bins=[-np.inf, sqm_quartiles[0.33], sqm_quartiles[0.67], np.inf],
+            labels=['Small', 'Medium', 'Large'],
+        )
     
     # Eficiencia espacial (m² por habitación)
     df_size['sqm_per_room'] = df_size[sqm_col] / df_size[rooms_col]
@@ -1174,7 +1304,7 @@ def encode_categorical_variables(df: pd.DataFrame, target_col: str = 'purchase_p
     print("🔤 Iniciando codificación de variables categóricas...")
     
     config = FEATURE_ENGINEERING_CONFIG['encoding']
-    categorical_vars = ['region', 'house_type', 'sales_type', 'season', 'price_category', 
+    categorical_vars = ['region', 'house_type', 'sales_type', 'season',
                        'rooms_category', 'size_category']
     
     df_encoded = df.copy()
@@ -1256,14 +1386,15 @@ def scale_features(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict]:
     
     ml_lib = _import_ml_libraries()
     if not ml_lib:
-        raise ImportError("No se pudieron importar las librerías de ML necesarias")
+        print("⚠️ sklearn no disponible; se omite el escalado y se continua con scalers vacíos.")
+        return df.copy(), {}
     
     df_scaled = df.copy()
     scalers = {}
     
     # Variables numéricas para escalar
     numeric_vars_original = ['sqm', 'no_rooms', 'year_build', 'property_age']
-    numeric_vars_derived = ['price_per_sqm', 'sqm_per_room', 'rooms_sqm_ratio', 
+    numeric_vars_derived = ['sqm_per_room', 'rooms_sqm_ratio',
                            'region_target_encoded', 'region_frequency']
     numeric_vars_cyclical = ['month_sin', 'month_cos', 'quarter_sin', 'quarter_cos']
     
@@ -1310,99 +1441,113 @@ def scale_features(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict]:
 
 def create_advanced_features(df: pd.DataFrame, target_col: str = 'purchase_price') -> pd.DataFrame:
     """
-    Crea features avanzados: interacciones, variables macro y geográficas
-    
-    Args:
-        df: DataFrame de entrada
-        target_col: Nombre de la columna objetivo
-        
-    Returns:
-        DataFrame con features avanzados
+    Crea features avanzados seguras para modelado temporal.
+
+    Las features derivadas directamente del target se reemplazan por versiones
+    causales calculadas sobre ventanas rolling por región.
     """
     print("🚀 Creando Feature Engineering Avanzado...")
-    
+
     config = FEATURE_ENGINEERING_CONFIG['temporal']
     df_advanced = df.copy()
-    
-    # === VARIABLES DE INTERACCIÓN ===
-    print("\n🔗 Creando variables de interacción...")
-    
-    # Interacciones geográficas
-    if 'sqm' in df_advanced.columns and 'region_target_encoded' in df_advanced.columns:
-        df_advanced['sqm_x_region'] = df_advanced['sqm'] * df_advanced['region_target_encoded']
-        print("✅ sqm × region_target_encoded")
-    
-    if 'price_per_sqm' in df_advanced.columns and 'region_target_encoded' in df_advanced.columns:
-        df_advanced['price_per_sqm_x_region'] = df_advanced['price_per_sqm'] * df_advanced['region_target_encoded']
-        print("✅ price_per_sqm × region_target_encoded")
-    
-    # Interacciones temporales
+
+    # === VARIABLES DE INTERACCIÓN SEGURAS ===
+    print("\n🔗 Creando variables de interacción seguras...")
+
+    # RFE-03: se elimina el bloque dependiente de price_per_sqm y region_target_encoded.
     for house_type in ['Villa', 'Apartment']:
         house_col = f'house_type_{house_type}'
         if house_col in df_advanced.columns and 'property_age' in df_advanced.columns:
-            df_advanced[f'age_x_{house_type.lower()}'] = df_advanced['property_age'] * df_advanced[house_col]
+            df_advanced[f'age_x_{house_type.lower()}'] = (
+                df_advanced['property_age'] * df_advanced[house_col]
+            )
             print(f"✅ property_age × {house_col}")
-    
-    # Interacciones de características físicas
+
     if 'sqm_per_room' in df_advanced.columns:
         df_advanced['sqm_per_room_squared'] = df_advanced['sqm_per_room'] ** 2
         print("✅ sqm_per_room²")
-    
+
     if 'no_rooms' in df_advanced.columns and 'sqm' in df_advanced.columns:
         df_advanced['rooms_sqm_interaction'] = df_advanced['no_rooms'] * df_advanced['sqm']
         print("✅ no_rooms × sqm")
-    
+
     # === VARIABLES MACROECONÓMICAS ===
     print("\n💹 Creando variables macroeconómicas...")
-    
+
     if 'year' in df_advanced.columns:
-        # Tendencia temporal
         year_min, year_max = df_advanced['year'].min(), df_advanced['year'].max()
-        df_advanced['time_trend'] = (df_advanced['year'] - year_min) / (year_max - year_min)
+        year_range = max(year_max - year_min, 1)
+        df_advanced['time_trend'] = (df_advanced['year'] - year_min) / year_range
         print("✅ time_trend")
-        
-        # Períodos de crisis
+
         crisis_years = config['crisis_years']
         df_advanced['crisis_period'] = df_advanced['year'].isin(crisis_years).astype(int)
         print(f"✅ crisis_period (años: {crisis_years})")
-        
-        # Fases del mercado
-        def assign_market_phase(year):
+
+        def assign_market_phase(year: int) -> str:
             for phase, (start, end) in config['market_phases'].items():
                 if start <= year <= end:
                     return phase
             return 'other'
-        
+
         df_advanced['market_phase'] = df_advanced['year'].apply(assign_market_phase)
-        
-        # One-hot encoding para market_phase
         market_dummies = pd.get_dummies(df_advanced['market_phase'], prefix='phase')
         df_advanced = pd.concat([df_advanced, market_dummies], axis=1)
         print(f"✅ market_phase → {list(market_dummies.columns)}")
-    
-    # === VARIABLES GEOGRÁFICAS AVANZADAS ===
-    print("\n🌍 Creando variables geográficas...")
-    
-    if 'region' in df_advanced.columns:
-        # Premium indicator
-        regional_p90 = df_advanced.groupby('region')[target_col].quantile(0.9).to_dict()
-        df_advanced['regional_p90'] = df_advanced['region'].map(regional_p90)
-        df_advanced['is_premium'] = (df_advanced[target_col] > df_advanced['regional_p90']).astype(int)
-        print("✅ is_premium")
-        
-        # Distancia a mediana regional
-        regional_median = df_advanced.groupby('region')[target_col].median().to_dict()
-        df_advanced['regional_median'] = df_advanced['region'].map(regional_median)
-        df_advanced['price_deviation_from_median'] = df_advanced[target_col] - df_advanced['regional_median']
-        print("✅ price_deviation_from_median")
-    
-    print(f"\n📋 Features avanzados completados: {df_advanced.shape[0]:,} filas x {df_advanced.shape[1]} columnas")
-    
+
+    # === VARIABLES GEOGRÁFICAS CAUSALES ===
+    print("\n🌍 Creando variables geográficas causales...")
+
+    required_cols = {'region', 'year', target_col}
+    if required_cols <= set(df_advanced.columns):
+        missing_rolling = [col for col in ROLLING_FEATURE_COLUMNS if col not in df_advanced.columns]
+        if missing_rolling:
+            df_advanced = create_rolling_regional_features(
+                df_advanced,
+                region_col='region',
+                price_col=target_col,
+                year_col='year',
+            )
+
+        rolling_p90 = df_advanced['rolling_regional_p90']
+        rolling_median = df_advanced['rolling_regional_median']
+        df_advanced['rolling_regional_median_v2'] = rolling_median
+
+        df_advanced['is_premium_causal'] = np.where(
+            rolling_p90.notna(),
+            (df_advanced[target_col] > rolling_p90).astype(float),
+            np.nan,
+        )
+        print("✅ is_premium_causal")
+
+        df_advanced['price_deviation_from_rolling_median'] = (
+            df_advanced[target_col] - rolling_median
+        )
+        print("✅ price_deviation_from_rolling_median")
+
+    legacy_cols = [
+        'regional_p90',
+        'regional_median',
+        'is_premium',
+        'price_deviation_from_median',
+        'sqm_x_region',
+        'price_per_sqm_x_region',
+    ]
+    existing_legacy = [col for col in legacy_cols if col in df_advanced.columns]
+    if existing_legacy:
+        df_advanced = df_advanced.drop(columns=existing_legacy)
+        print(f"🧹 Legacy removido: {existing_legacy}")
+
+    print(
+        f"\n📋 Features avanzados completados: "
+        f"{df_advanced.shape[0]:,} filas x {df_advanced.shape[1]} columnas"
+    )
+
     return df_advanced
 
-def prepare_final_dataset(df: pd.DataFrame, target_col: str = 'purchase_price') -> Tuple[pd.DataFrame, List[str], Dict]:
+def prepare_final_dataset(df: pd.DataFrame, target_col: str = MODEL_TARGET_COL) -> Tuple[pd.DataFrame, List[str], Dict]:
     """
-    Prepara el dataset final para modelado con feature selection
+    Prepara el dataset final para modelado con guardas anti-leak.
     
     Args:
         df: DataFrame de entrada
@@ -1414,99 +1559,140 @@ def prepare_final_dataset(df: pd.DataFrame, target_col: str = 'purchase_price') 
     print("🎯 Preparando dataset final para modelado...")
     
     config = FEATURE_ENGINEERING_CONFIG['feature_selection']
-    ml_lib = _import_ml_libraries()
-    
-    # === EXCLUSIÓN DE COLUMNAS ===
+    if target_col not in df.columns:
+        raise ValueError(f"La columna objetivo '{target_col}' no existe en el DataFrame")
+
+    input_forbidden = FORBIDDEN_FEATURE_COLUMNS & set(df.columns)
+    assert not input_forbidden, (
+        "RFE-05 anti-leak guard: columnas prohibidas presentes en el input de "
+        f"prepare_final_dataset: {sorted(input_forbidden)}"
+    )
+
     exclude_cols = [
+        # Identificadores y columnas no-feature
         'date', 'region', 'house_id', 'address', 'city', 'area', 'zip_code',
-        'house_type', 'sales_type', 'season', 'price_category', 
-        'rooms_category', 'size_category', 'market_phase',
-        'regional_p90', 'regional_median', 'decade_built',
-        'year_build', 'price_zscore', 'sqm_price', '%_change_between_offer_and_purchase',
-        'dk_ann_infl_rate%', 'yield_on_mortgage_credit_bonds%', 'nom_interest_rate%'
+        'house_type', 'sales_type', 'season', 'market_phase',
+        'rooms_category', 'size_category', 'decade_built', 'year_build',
+        # Target crudo y derivadas directas del target
+        'purchase_price', 'price_per_sqm', 'price_zscore', 'price_category',
+        'sqm_x_region', 'price_per_sqm_x_region',
+        'is_premium', 'price_deviation_from_median',
+        'regional_p90', 'regional_median',
+        # Agregados regionales globales legacy
+        'regional_price_mean', 'regional_price_median', 'regional_price_std',
+        'regional_price_cv', 'regional_price_rank',
+        'regional_transaction_count', 'regional_liquidity_score',
+        'region_target_encoded', 'region_count',
+        # Intermedias auxiliares
+        'rolling_regional_median_v2',
+        # Macro / variables economicas redundantes
+        'sqm_price', '%_change_between_offer_and_purchase',
+        'dk_ann_infl_rate%', 'yield_on_mortgage_credit_bonds%', 'nom_interest_rate%',
+        # Redundantes temporales
+        'quarter', 'time_trend',
     ]
-    
-    # Asegurar que las variables cíclicas temporales se preserven siempre
-    critical_features = ['month_sin', 'month_cos', 'quarter_sin', 'quarter_cos']
-    
+
+    critical_features = [
+        'month_sin',
+        'month_cos',
+        'quarter_sin',
+        'quarter_cos',
+        'rolling_regional_mean',
+        'rolling_regional_median',
+        'rolling_regional_std',
+        'rolling_regional_cv',
+        'rolling_regional_count',
+        'rolling_regional_p90',
+        'is_premium_causal',
+        'price_deviation_from_rolling_median',
+    ]
+
     all_columns = df.columns.tolist()
     feature_columns = [col for col in all_columns if col not in exclude_cols + [target_col]]
-    
+
+    leaks_detected = FORBIDDEN_FEATURE_COLUMNS & set(feature_columns)
+    assert not leaks_detected, (
+        "RFE-05 anti-leak guard: columnas prohibidas en feature_columns: "
+        f"{sorted(leaks_detected)}"
+    )
+
     print(f"Features candidatas: {len(feature_columns)}")
-    
-    # === LIMPIEZA DE DATOS ===
+
     print("\n🧹 Limpieza de datos...")
     df_modeling = df[feature_columns + [target_col]].copy()
-    
-    # Limpiar infinitos y nulos
+
     for col in df_modeling.columns:
-        if col != target_col:
+        if col == target_col:
+            continue
+        if np.issubdtype(df_modeling[col].dtype, np.number):
             if np.isinf(df_modeling[col]).any():
                 df_modeling[col] = df_modeling[col].replace([np.inf, -np.inf], np.nan)
-            if df_modeling[col].isnull().any():
-                df_modeling[col].fillna(df_modeling[col].median(), inplace=True)
-    
-    # === FEATURE SELECTION ===
+
     print("\n🎯 Feature selection...")
-    
+
     X = df_modeling[feature_columns].copy()
     y = df_modeling[target_col].copy()
-    
-    # Usar muestra si es necesario
+
+    X_for_selection = X.copy()
+    for col in X_for_selection.columns:
+        X_for_selection[col] = pd.to_numeric(X_for_selection[col], errors='coerce')
+        if X_for_selection[col].isnull().any():
+            median_value = X_for_selection[col].median()
+            if pd.isna(median_value):
+                median_value = 0.0
+            X_for_selection[col] = X_for_selection[col].fillna(median_value)
+
     if len(X) > config['sample_size_fs']:
         sample_idx = np.random.choice(len(X), config['sample_size_fs'], replace=False)
-        X_sample = X.iloc[sample_idx]
+        X_sample = X_for_selection.iloc[sample_idx]
         y_sample = y.iloc[sample_idx]
         print(f"Usando muestra de {len(X_sample):,} observaciones")
     else:
-        X_sample = X
+        X_sample = X_for_selection
         y_sample = y
-    
-    # Mutual Information
+
     try:
         from sklearn.feature_selection import mutual_info_regression, f_regression
-        
+
         mi_scores = mutual_info_regression(X_sample, y_sample, random_state=42)
         mi_results = pd.DataFrame({
             'feature': X_sample.columns,
             'mutual_info': mi_scores
         }).sort_values('mutual_info', ascending=False)
-        
-        # F-regression
+
         f_scores, f_pvalues = f_regression(X_sample, y_sample)
         f_results = pd.DataFrame({
             'feature': X_sample.columns,
             'f_score': f_scores,
             'p_value': f_pvalues
         }).sort_values('f_score', ascending=False)
-        
-        # Combinar scores
-        mi_results['mi_normalized'] = (mi_results['mutual_info'] - mi_results['mutual_info'].min()) / (mi_results['mutual_info'].max() - mi_results['mutual_info'].min())
-        f_results['f_normalized'] = (f_results['f_score'] - f_results['f_score'].min()) / (f_results['f_score'].max() - f_results['f_score'].min())
-        
+
+        mi_span = mi_results['mutual_info'].max() - mi_results['mutual_info'].min()
+        f_span = f_results['f_score'].max() - f_results['f_score'].min()
+        mi_results['mi_normalized'] = 0.0 if mi_span == 0 else (
+            (mi_results['mutual_info'] - mi_results['mutual_info'].min()) / mi_span
+        )
+        f_results['f_normalized'] = 0.0 if f_span == 0 else (
+            (f_results['f_score'] - f_results['f_score'].min()) / f_span
+        )
+
         combined_results = mi_results.merge(f_results, on='feature')
         combined_results['combined_score'] = (combined_results['mi_normalized'] + combined_results['f_normalized']) / 2
         combined_results = combined_results.sort_values('combined_score', ascending=False)
-        
-        # Seleccionar top features
+
         top_k = min(config['max_features'], len(feature_columns))
         selected_features_from_ranking = combined_results.head(top_k)['feature'].tolist()
-        
-        # Asegurar que las variables cíclicas críticas estén incluidas
+
         critical_features_available = [f for f in critical_features if f in feature_columns]
-        selected_features = list(set(selected_features_from_ranking + critical_features_available))
-        
-        # Si tenemos más features de las permitidas, priorizar las críticas
+        selected_features = list(dict.fromkeys(selected_features_from_ranking + critical_features_available))
+
         if len(selected_features) > config['max_features']:
-            # Mantener críticas + top features hasta completar max_features
             non_critical = [f for f in selected_features_from_ranking if f not in critical_features_available]
             selected_features = critical_features_available + non_critical[:config['max_features'] - len(critical_features_available)]
-        
+
         print(f"✅ Seleccionadas {len(selected_features)} features de {len(feature_columns)}")
-        
-        # Dataset final
+
         df_final = df_modeling[selected_features + [target_col]].copy()
-        
         metadata = {
             'feature_selection': {
                 'mutual_info': mi_results.to_dict('records'),
@@ -1514,28 +1700,57 @@ def prepare_final_dataset(df: pd.DataFrame, target_col: str = 'purchase_price') 
                 'combined': combined_results.to_dict('records')
             },
             'selected_features': selected_features,
-            'dataset_shape': df_final.shape
+            'dataset_shape': df_final.shape,
+            'target_col': target_col,
         }
-        
+
         print(f"📊 Dataset final: {df_final.shape[0]:,} filas x {df_final.shape[1]-1} features")
-        
+
         return df_final, selected_features, metadata
-        
+
     except Exception as e:
         print(f"⚠️ Error en feature selection: {e}")
-        # Fallback: usar todas las features disponibles
-        selected_features = feature_columns[:config['max_features']]
+        critical_features_available = [f for f in critical_features if f in feature_columns]
+        non_critical = [f for f in feature_columns if f not in critical_features_available]
+        remaining_slots = max(config['max_features'] - len(critical_features_available), 0)
+        selected_features = critical_features_available + non_critical[:remaining_slots]
         df_final = df_modeling[selected_features + [target_col]].copy()
-        
         metadata = {
             'selected_features': selected_features,
             'dataset_shape': df_final.shape,
-            'note': 'Feature selection falló, usando top features por orden'
+            'target_col': target_col,
+            'note': 'Feature selection fallo, usando top features por orden'
         }
-        
+
         return df_final, selected_features, metadata
 
-def create_train_test_split(df: pd.DataFrame, selected_features: List[str], target_col: str = 'purchase_price') -> Dict:
+
+def _compute_reference_medians(
+    df: pd.DataFrame,
+    feature_columns: List[str],
+    reference_mask: pd.Series,
+) -> pd.Series:
+    reference_frame = df.loc[reference_mask, feature_columns].copy()
+    reference_frame = reference_frame.replace([np.inf, -np.inf], np.nan)
+    medians = reference_frame.median(numeric_only=True).fillna(0.0)
+    return medians.reindex(feature_columns).fillna(0.0)
+
+
+def _apply_reference_imputation(
+    frame: pd.DataFrame,
+    feature_columns: List[str],
+    medians: pd.Series,
+) -> pd.DataFrame:
+    frame_imputed = frame.copy()
+    frame_imputed[feature_columns] = (
+        frame_imputed[feature_columns]
+        .replace([np.inf, -np.inf], np.nan)
+        .fillna(medians)
+    )
+    return frame_imputed
+
+
+def create_train_test_split(df: pd.DataFrame, selected_features: List[str], target_col: str = MODEL_TARGET_COL) -> Dict:
     """
     Crea división temporal train/test
     
@@ -1555,10 +1770,9 @@ def create_train_test_split(df: pd.DataFrame, selected_features: List[str], targ
     if 'year' not in df.columns:
         raise ValueError("La columna 'year' es necesaria para la división temporal")
     
-    # División temporal
     train_mask = df['year'] <= config['split_year']
     test_mask = df['year'] >= config['test_start_year']
-    
+
     X_train = df[train_mask][selected_features]
     X_test = df[test_mask][selected_features]
     y_train = df[train_mask][target_col]
@@ -1584,7 +1798,82 @@ def create_train_test_split(df: pd.DataFrame, selected_features: List[str], targ
         'split_info': split_info
     }
 
-def save_feature_engineering_artifacts(df_final: pd.DataFrame, 
+
+def create_walk_forward_folds(
+    df: pd.DataFrame,
+    selected_features: List[str],
+    target_col: str = MODEL_TARGET_COL,
+    year_col: str = 'year',
+    min_train_end: Optional[int] = None,
+    max_train_end: Optional[int] = None,
+    holdout_start: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Genera folds walk-forward expanding y holdout final.
+    """
+    if min_train_end is None:
+        min_train_end = CV_MIN_TRAIN_END_YEAR
+    if max_train_end is None:
+        max_train_end = CV_MAX_TRAIN_END_YEAR
+    if holdout_start is None:
+        holdout_start = HOLDOUT_START_YEAR
+
+    if year_col not in df.columns:
+        raise ValueError(f"La columna '{year_col}' es requerida para walk-forward")
+    if target_col not in df.columns:
+        raise ValueError(f"La columna objetivo '{target_col}' es requerida para walk-forward")
+
+    folds = []
+    for train_end in range(min_train_end, max_train_end + 1):
+        val_year = train_end + 1
+        if val_year >= holdout_start:
+            break
+
+        train_mask = df[year_col] <= train_end
+        val_mask = df[year_col] == val_year
+
+        X_train = df.loc[train_mask, selected_features].copy()
+        y_train = df.loc[train_mask, target_col].copy()
+        X_val = df.loc[val_mask, selected_features].copy()
+        y_val = df.loc[val_mask, target_col].copy()
+
+        folds.append({
+            'train_end': train_end,
+            'val_year': val_year,
+            'train_size': len(X_train),
+            'val_size': len(X_val),
+            'X_train': X_train,
+            'y_train': y_train,
+            'X_val': X_val,
+            'y_val': y_val,
+        })
+        print(f"  fold train<={train_end} (n={len(X_train):,}) / val={val_year} (n={len(X_val):,})")
+
+    train_full_mask = df[year_col] < holdout_start
+    holdout_mask = df[year_col] >= holdout_start
+    holdout = {
+        'X_train_full': df.loc[train_full_mask, selected_features].copy(),
+        'y_train_full': df.loc[train_full_mask, target_col].copy(),
+        'X_holdout': df.loc[holdout_mask, selected_features].copy(),
+        'y_holdout': df.loc[holdout_mask, target_col].copy(),
+        'holdout_years': sorted(df.loc[holdout_mask, year_col].dropna().unique().tolist()),
+    }
+
+    print(f"📊 {len(folds)} folds walk-forward + holdout {holdout['holdout_years']}")
+    return {
+        'folds': folds,
+        'holdout': holdout,
+        'config': {
+            'min_train_end': min_train_end,
+            'max_train_end': max_train_end,
+            'holdout_start': holdout_start,
+            'n_folds': len(folds),
+            'study_name': OPTUNA_STUDY_NAME_V2,
+        },
+    }
+
+
+def save_feature_engineering_artifacts(df_final: pd.DataFrame,
                                      selected_features: List[str],
                                      scalers: Dict,
                                      metadata: Dict,
@@ -1610,57 +1899,65 @@ def save_feature_engineering_artifacts(df_final: pd.DataFrame,
     output_dir.mkdir(parents=True, exist_ok=True)
     
     saved_files = {}
-    
-    # Dataset completo
-    fe_complete_path = output_dir / "feature_engineered_complete.parquet"
-    df_final.to_parquet(fe_complete_path, index=False)
-    saved_files['complete_dataset'] = fe_complete_path
-    
-    # Dataset para modelado (sin año)
-    modeling_cols = [col for col in selected_features if col != 'year'] + ['purchase_price']
-    modeling_path = output_dir / "modeling_dataset.parquet"
-    df_final[modeling_cols].to_parquet(modeling_path, index=False)
-    saved_files['modeling_dataset'] = modeling_path
-    
-    # Train/Test splits
+
+    if 'year' not in df_final.columns:
+        raise ValueError("El dataset final debe conservar la columna 'year'")
+
+    processed_path = output_dir / "processed_data.parquet"
+    df_final.to_parquet(processed_path, index=False)
+    saved_files['processed_data'] = processed_path
+
     train_path = output_dir / "train_data.parquet"
     test_path = output_dir / "test_data.parquet"
-    
-    train_data = pd.concat([splits['X_train'], splits['y_train']], axis=1)
-    test_data = pd.concat([splits['X_test'], splits['y_test']], axis=1)
-    
+
+    reference_mask = df_final['year'] < HOLDOUT_START_YEAR
+    reference_medians = _compute_reference_medians(df_final, selected_features, reference_mask)
+    X_train_imputed = _apply_reference_imputation(splits['X_train'], selected_features, reference_medians)
+    X_test_imputed = _apply_reference_imputation(splits['X_test'], selected_features, reference_medians)
+
+    train_data = pd.concat([X_train_imputed, splits['y_train']], axis=1)
+    test_data = pd.concat([X_test_imputed, splits['y_test']], axis=1)
+
     train_data.to_parquet(train_path, index=False)
     test_data.to_parquet(test_path, index=False)
     saved_files['train_data'] = train_path
     saved_files['test_data'] = test_path
-    
-    # Scalers
+
     scalers_path = output_dir / "scalers.pkl"
     with open(scalers_path, 'wb') as f:
         pickle.dump(scalers, f)
     saved_files['scalers'] = scalers_path
-    
-    # Features seleccionadas
+
     features_path = output_dir / "selected_features.txt"
     with open(features_path, 'w') as f:
         f.write('\n'.join(selected_features))
     saved_files['selected_features'] = features_path
-    
-    # Metadatos completos
+
     complete_metadata = {
         **metadata,
         'scalers_info': {k: {'variables': v['variables']} for k, v in scalers.items()},
         'split_info': splits['split_info'],
+        'artifact_contract': {
+            'processed_data': 'processed_data.parquet',
+            'train_data': 'train_data.parquet',
+            'test_data': 'test_data.parquet',
+            'feature_metadata': 'feature_metadata.json',
+            'selected_features': 'selected_features.txt',
+            'scalers': 'scalers.pkl',
+        },
+        'imputation_reference': {
+            'type': 'median_from_pre_holdout_train',
+            'holdout_start_year': HOLDOUT_START_YEAR,
+        },
         'process_timestamp': datetime.now().isoformat(),
         'config_used': FEATURE_ENGINEERING_CONFIG
     }
-    
-    metadata_path = output_dir / "feature_engineering_metadata.json"
+
+    metadata_path = output_dir / "feature_metadata.json"
     with open(metadata_path, 'w') as f:
         json.dump(complete_metadata, f, indent=2, default=str)
     saved_files['metadata'] = metadata_path
-    
-    # Resumen
+
     summary = f"""
 # RESUMEN DE FEATURE ENGINEERING
 Generado: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -1692,12 +1989,12 @@ Generado: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
     with open(summary_path, 'w', encoding='utf-8') as f:
         f.write(summary)
     saved_files['summary'] = summary_path
-    
+
     print(f"✅ Artefactos guardados en: {output_dir}")
     for name, path in saved_files.items():
         size_mb = path.stat().st_size / (1024**2)
         print(f"  📄 {path.name}: {size_mb:.1f} MB")
-    
+
     return saved_files
 
 # ===== FUNCIÓN PRINCIPAL DE PIPELINE =====
@@ -1720,6 +2017,9 @@ def run_complete_feature_engineering_pipeline(df: pd.DataFrame,
     print("=" * 60)
     
     try:
+        raw_target_col = target_col
+        model_target_col = MODEL_TARGET_COL
+
         # 0. Limpiar columnas duplicadas
         df = clean_duplicate_columns(df)
         
@@ -1728,7 +2028,7 @@ def run_complete_feature_engineering_pipeline(df: pd.DataFrame,
         df_temp = clean_duplicate_columns(df_temp)
         
         # 2. Variables de precio
-        df_price = create_price_features(df_temp, target_col)
+        df_price = create_price_features(df_temp, raw_target_col)
         df_price = clean_duplicate_columns(df_price)
         
         # 3. Variables de tamaño
@@ -1736,26 +2036,51 @@ def run_complete_feature_engineering_pipeline(df: pd.DataFrame,
         df_size = clean_duplicate_columns(df_size)
         
         # 4. Codificación categórica
-        df_encoded, encoding_info = encode_categorical_variables(df_size, target_col)
+        df_encoded, encoding_info = encode_categorical_variables(df_size, raw_target_col)
         df_encoded = clean_duplicate_columns(df_encoded)
         
         # 5. Escalado
         df_scaled, scalers = scale_features(df_encoded)
         df_scaled = clean_duplicate_columns(df_scaled)
+
+        # 6. Agregados regionales causales
+        df_rolling = create_rolling_regional_features(
+            df_scaled,
+            region_col='region',
+            price_col=raw_target_col,
+            year_col='year',
+        )
+        df_rolling = clean_duplicate_columns(df_rolling)
         
-        # 6. Features avanzados
-        df_advanced = create_advanced_features(df_scaled, target_col)
+        # 7. Features avanzados
+        df_advanced = create_advanced_features(df_rolling, raw_target_col)
         df_advanced = clean_duplicate_columns(df_advanced)
+
+        removable_cols = sorted(
+            (
+                FORBIDDEN_FEATURE_COLUMNS |
+                set(ROLLING_AUXILIARY_COLUMNS) |
+                ({raw_target_col} if raw_target_col != model_target_col else set())
+            ) & set(df_advanced.columns)
+        )
+        if removable_cols:
+            df_model_ready = df_advanced.drop(columns=removable_cols)
+            print(f"🧹 Columnas removidas antes de selección final: {removable_cols}")
+        else:
+            df_model_ready = df_advanced.copy()
         
-        # 7. Preparación final
-        df_final, selected_features, metadata = prepare_final_dataset(df_advanced, target_col)
+        # 8. Preparación final
+        df_final, selected_features, metadata = prepare_final_dataset(df_model_ready, model_target_col)
+        metadata['raw_target_col'] = raw_target_col
+        metadata['model_target_col'] = model_target_col
         
-        # 8. División train/test
-        df_final_with_year = df_advanced[selected_features + [target_col, 'year']].copy()
+        # 9. División train/test y dataset canónico
+        final_columns = selected_features + [model_target_col, 'year']
+        df_final_with_year = df_model_ready[final_columns].copy()
         df_final_with_year = clean_duplicate_columns(df_final_with_year)
-        splits = create_train_test_split(df_final_with_year, selected_features, target_col)
+        splits = create_train_test_split(df_final_with_year, selected_features, model_target_col)
         
-        # 9. Guardar artefactos
+        # 10. Guardar artefactos
         if output_dir is None:
             from pathlib import Path
             output_dir = Path.cwd() / "data" / "processed"
@@ -1770,6 +2095,7 @@ def run_complete_feature_engineering_pipeline(df: pd.DataFrame,
         
         return {
             'final_dataset': df_final,
+            'processed_dataset': df_final_with_year,
             'selected_features': selected_features,
             'scalers': scalers,
             'metadata': metadata,

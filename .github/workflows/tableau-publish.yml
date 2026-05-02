@@ -1,0 +1,64 @@
+name: Tableau Publish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/medallion/**'
+      - 'src/tableau/**'
+      - 'pipeline/**'
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install pandas pyarrow statsmodels tableauhyperapi tableauserverclient requests
+
+      - name: Run Bronze → Silver → Gold pipeline
+        working-directory: .
+        env:
+          PYTHONPATH: src
+        run: |
+          python pipeline/run_bronze.py
+          python pipeline/run_silver.py
+          python pipeline/run_gold.py
+
+      - name: Generate .hyper extracts
+        working-directory: .
+        env:
+          PYTHONPATH: src
+        run: |
+          python pipeline/run_tableau.py --sample
+
+      - name: Publish to Tableau Server
+        if: ${{ vars.TABLEAU_PUBLISH_ENABLED == 'true' }}
+        working-directory: .
+        env:
+          PYTHONPATH: src
+          TABLEAU_SERVER_URL: ${{ secrets.TABLEAU_SERVER_URL }}
+          TABLEAU_PAT_NAME: ${{ secrets.TABLEAU_PAT_NAME }}
+          TABLEAU_PAT_SECRET: ${{ secrets.TABLEAU_PAT_SECRET }}
+          TABLEAU_SITE_ID: ${{ secrets.TABLEAU_SITE_ID }}
+          TABLEAU_PROJECT: ${{ vars.TABLEAU_PROJECT || 'Default' }}
+        run: |
+          python pipeline/run_tableau.py --publish --refresh
+
+      - name: Upload .hyper artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hyper-extracts
+          path: data/hyper/*.hyper
+          retention-days: 7

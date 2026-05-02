@@ -178,4 +178,12 @@ temp/
 tmp/
 cache/
 tests/
+!tests/
+tests/*
+!tests/test_*.py
 results/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
