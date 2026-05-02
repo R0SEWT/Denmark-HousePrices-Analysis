@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "Denmark_HousePrices_Analysis",
+  "project_id": "ceaf3e5f-7954-45f4-b3b3-aec5174ebfb1"
+}
