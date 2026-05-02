@@ -27,11 +27,11 @@ def _enforce_schema(df: pd.DataFrame) -> pd.DataFrame:
 
     for col in NULLABLE_INT_COLS:
         if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+            df[col] = pd.array(pd.to_numeric(df[col], errors="coerce"), dtype="Int64")
 
     for col in FLOAT_COLS:
         if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce").astype("float64")
+            df[col] = pd.array(pd.to_numeric(df[col], errors="coerce"), dtype="float64")
 
     if "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"], unit="s", errors="coerce")

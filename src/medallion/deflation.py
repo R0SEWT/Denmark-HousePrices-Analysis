@@ -1,6 +1,5 @@
 """CPI chain-linking and price deflation utilities."""
 
-import numpy as np
 import pandas as pd
 
 from config import CPI_BASE_YEAR, CPI_INDEX_FILE, SILVER_DIR
@@ -35,12 +34,12 @@ def deflate_to_base_year(
     """Add real_purchase_price and real_sqm_price deflated to base_year DKK."""
     base_quarters = cpi_table[cpi_table["quarter_id"].str.startswith(str(base_year))]
     if base_quarters.empty:
-        last_q = cpi_table["quarter_id"].max()
-        cpi_base = cpi_table.loc[
-            cpi_table["quarter_id"] == last_q, "cpi_index_q"
-        ].iloc[0]
+        last_q = str(cpi_table["quarter_id"].max())
+        cpi_base = float(
+            cpi_table[cpi_table["quarter_id"] == last_q]["cpi_index_q"].values[0]
+        )
     else:
-        cpi_base = base_quarters["cpi_index_q"].iloc[-1]
+        cpi_base = float(base_quarters["cpi_index_q"].values[-1])
 
     df = df.merge(
         cpi_table[["quarter_id", "cpi_index_q"]],

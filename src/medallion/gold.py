@@ -3,7 +3,6 @@
 import json
 from datetime import datetime, timezone
 
-import numpy as np
 import pandas as pd
 
 from config import (
@@ -25,11 +24,12 @@ DEFAULT_EXCLUDE_FLAGS = ["is_family_sale", "is_unclassified_sale"]
 
 
 def _load_silver(exclude_flags: list[str] | None = None) -> pd.DataFrame:
-    df = pd.read_parquet(SILVER_INPUT)
+    df: pd.DataFrame = pd.read_parquet(SILVER_INPUT)
     if exclude_flags:
         for flag in exclude_flags:
             if flag in df.columns:
-                df = df[~df[flag]]
+                mask = ~df[flag].astype(bool)
+                df = pd.DataFrame(df[mask])
     return df
 
 
@@ -69,10 +69,10 @@ def compute_sqm_price_index(df: pd.DataFrame | None = None) -> pd.DataFrame:
 
     if STL_COMPONENTS_FILE.exists():
         stl = pd.read_parquet(STL_COMPONENTS_FILE)
+        stl_subset = pd.DataFrame(stl[["region", "quarter_id", "trend"]].values,
+                                   columns=["region", "quarter_id", "price_index_stl_trend"])
         quarterly = quarterly.merge(
-            stl[["region", "quarter_id", "trend"]].rename(
-                columns={"trend": "price_index_stl_trend"}
-            ),
+            stl_subset,
             on=["region", "quarter_id"],
             how="left",
         )
@@ -176,7 +176,7 @@ def compute_drawdown(price_index_df: pd.DataFrame | None = None) -> pd.DataFrame
 
     all_episodes = []
 
-    for (region,), grp in price_index_df.groupby(["region"]):
+    for region, grp in price_index_df.groupby("region"):
         series = grp.set_index("quarter_id")["price_index"].sort_index()
         episodes = _find_drawdown_episodes(series)
         for ep in episodes:
@@ -313,6 +313,8 @@ def compute_bond_elasticity(
 
 def run_gold(silver_manifest: dict | None = None) -> dict:
     """Run all Gold KPI computations. Returns manifest dict."""
+    if silver_manifest:
+        print(f"Gold: consuming Silver manifest ({silver_manifest.get('output_row_count', '?')} rows)")
     GOLD_DIR.mkdir(parents=True, exist_ok=True)
 
     price_idx = compute_sqm_price_index()
