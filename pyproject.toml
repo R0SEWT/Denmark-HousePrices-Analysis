@@ -21,6 +21,8 @@ dependencies = [
   "ipython",
   "kaggle",
   "ipykernel>=7.2.0",
+  "plotly>=6.7.0",
+  "dash>=4.1.0",
 ]
 
 [project.optional-dependencies]
