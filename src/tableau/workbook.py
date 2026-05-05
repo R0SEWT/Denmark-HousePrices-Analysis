@@ -99,3 +99,41 @@ def validate_template(twb_path: Path, hyper_dir: Path = HYPER_DIR) -> dict[str, 
         matched = _resolve_hyper_name(caption, hyper_dir) is not None
         results[caption] = matched
     return results
+
+
+def generate_workbook(
+    template_name: str = "dk_housing_tb3.twb",
+    output_path: Path | None = None,
+    hyper_dir: Path = HYPER_DIR,
+    server_url: str | None = None,
+    site_id: str | None = None,
+    project_name: str = "Default",
+) -> Path:
+    """Generate a workbook from a template, replacing __HYPER_DIR__ placeholders.
+
+    This replaces the raw placeholder paths in the template with actual .hyper
+    file paths, then applies datasource connection patching.
+    """
+    template_path = TEMPLATES_DIR / template_name
+    if not template_path.exists():
+        raise FileNotFoundError(f"Template not found: {template_path}")
+
+    output_path = output_path or hyper_dir / "dk_housing_tb3.twb"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    content = template_path.read_text(encoding="utf-8")
+    content = content.replace("__HYPER_DIR__", str(hyper_dir.resolve()))
+
+    output_path.write_text(content, encoding="utf-8")
+
+    patched = patch_datasource_connections(
+        output_path,
+        output_path,
+        hyper_dir=hyper_dir,
+        server_url=server_url,
+        site_id=site_id,
+        project_name=project_name,
+    )
+
+    print(f"Workbook generated → {patched}")
+    return patched

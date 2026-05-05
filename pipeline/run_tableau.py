@@ -14,6 +14,8 @@ def main():
     parser.add_argument("--publish", action="store_true", help="Also publish to Tableau Server")
     parser.add_argument("--refresh", action="store_true", help="Trigger extract refresh after publish")
     parser.add_argument("--sample", action="store_true", help="Also export Silver 10% sample")
+    parser.add_argument("--workbook", action="store_true", help="Generate .twb workbook from template")
+    parser.add_argument("--server-url", help="Tableau Server URL for workbook connections")
     parser.add_argument(
         "--export-view", metavar="VIEW_URL",
         help="Export a view as PDF (use --fmt to change format)",
@@ -30,6 +32,14 @@ def main():
     if args.sample:
         sample_path = export_silver_sample()
         print(f"Silver sample → {sample_path}")
+
+    if args.workbook:
+        from tableau.workbook import generate_workbook
+        twb_path = generate_workbook(
+            hyper_dir=HYPER_DIR,
+            server_url=args.server_url,
+        )
+        print(f"Workbook → {twb_path}")
 
     if args.publish:
         from tableau.publish import publish_all_hyper, refresh_datasource_tsc, _tsc_available

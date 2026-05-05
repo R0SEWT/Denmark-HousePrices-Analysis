@@ -1,0 +1,230 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<workbook source-build='2024.1.0' source-platform='win' version='18.1'
+          xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <preferences>
+    <preference name='ui.encoding.shelf.height' value='24' />
+    <preference name='ui.shelf.height' value='26' />
+  </preferences>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       DATASOURCES — one per Gold KPI .hyper + Silver sample
+       Connection paths are placeholders; use workbook.py to patch.
+       ══════════════════════════════════════════════════════════════ -->
+  <datasources>
+
+    <!-- DS 1: Regional Price Index (H2) -->
+    <datasource caption='KPI SQM Price Index' inline='true' name='kpi_sqm_price_index'>
+      <connection class='hyper' dbname='__HYPER_DIR__/kpi_sqm_price_index.hyper'
+                  schema='Extract' tablename='kpi_sqm_price_index'>
+        <relation name='Extract' table='[Extract].[kpi_sqm_price_index]' type='table' />
+      </connection>
+      <column caption='Region' datatype='string' name='[region]' role='dimension' type='nominal' />
+      <column caption='Quarter' datatype='string' name='[quarter_id]' role='dimension' type='nominal' />
+      <column caption='Year' datatype='integer' name='[year_sale]' role='dimension' type='quantitative' />
+      <column caption='Quarter Num' datatype='integer' name='[quarter_num]' role='dimension' type='quantitative' />
+      <column caption='Median Real SQM Price' datatype='real' name='[real_sqm_price_median]' role='measure' type='quantitative' />
+      <column caption='Transactions' datatype='integer' name='[n_transactions]' role='measure' type='quantitative' />
+      <column caption='Price Index (1992=100)' datatype='real' name='[price_index]' role='measure' type='quantitative' />
+      <column caption='STL Trend' datatype='real' name='[price_index_stl_trend]' role='measure' type='quantitative' />
+    </datasource>
+
+    <!-- DS 2: Transaction Volume (H1) -->
+    <datasource caption='KPI Transaction Volume' inline='true' name='kpi_transaction_volume'>
+      <connection class='hyper' dbname='__HYPER_DIR__/kpi_transaction_volume.hyper'
+                  schema='Extract' tablename='kpi_transaction_volume'>
+        <relation name='Extract' table='[Extract].[kpi_transaction_volume]' type='table' />
+      </connection>
+      <column caption='Region' datatype='string' name='[region]' role='dimension' type='nominal' />
+      <column caption='Quarter' datatype='string' name='[quarter_id]' role='dimension' type='nominal' />
+      <column caption='House Type' datatype='string' name='[house_type]' role='dimension' type='nominal' />
+      <column caption='Year' datatype='integer' name='[year_sale]' role='dimension' type='quantitative' />
+      <column caption='Quarter Num' datatype='integer' name='[quarter_num]' role='dimension' type='quantitative' />
+      <column caption='Transactions' datatype='integer' name='[n_transactions]' role='measure' type='quantitative' />
+      <column caption='% of Annual Total' datatype='real' name='[pct_of_annual_total]' role='measure' type='quantitative' />
+    </datasource>
+
+    <!-- DS 3: Bond-Yield Elasticity (H1) -->
+    <datasource caption='KPI Bond Elasticity' inline='true' name='kpi_bond_elasticity'>
+      <connection class='hyper' dbname='__HYPER_DIR__/kpi_bond_elasticity.hyper'
+                  schema='Extract' tablename='kpi_bond_elasticity'>
+        <relation name='Extract' table='[Extract].[kpi_bond_elasticity]' type='table' />
+      </connection>
+      <column caption='Region' datatype='string' name='[region]' role='dimension' type='nominal' />
+      <column caption='Lag (Quarters)' datatype='integer' name='[lag_quarters]' role='dimension' type='quantitative' />
+      <column caption='OLS Beta' datatype='real' name='[beta_ols]' role='measure' type='quantitative' />
+      <column caption='OLS Beta SE' datatype='real' name='[beta_ols_se]' role='measure' type='quantitative' />
+      <column caption='R²' datatype='real' name='[r2]' role='measure' type='quantitative' />
+      <column caption='N Observations' datatype='integer' name='[n_observations]' role='measure' type='quantitative' />
+      <column caption='Period' datatype='string' name='[period_label]' role='dimension' type='nominal' />
+      <column caption='Causal Warning' datatype='string' name='[causal_warning]' role='dimension' type='nominal' />
+    </datasource>
+
+    <!-- DS 4: Drawdown Episodes (H3) -->
+    <datasource caption='KPI Drawdown' inline='true' name='kpi_drawdown'>
+      <connection class='hyper' dbname='__HYPER_DIR__/kpi_drawdown.hyper'
+                  schema='Extract' tablename='kpi_drawdown'>
+        <relation name='Extract' table='[Extract].[kpi_drawdown]' type='table' />
+      </connection>
+      <column caption='Region' datatype='string' name='[region]' role='dimension' type='nominal' />
+      <column caption='House Type' datatype='string' name='[house_type]' role='dimension' type='nominal' />
+      <column caption='Peak Quarter' datatype='string' name='[peak_quarter_id]' role='dimension' type='nominal' />
+      <column caption='Trough Quarter' datatype='string' name='[trough_quarter_id]' role='dimension' type='nominal' />
+      <column caption='Peak Index' datatype='real' name='[peak_index]' role='measure' type='quantitative' />
+      <column caption='Trough Index' datatype='real' name='[trough_index]' role='measure' type='quantitative' />
+      <column caption='Drawdown %' datatype='real' name='[drawdown_pct]' role='measure' type='quantitative' />
+      <column caption='Duration (Quarters)' datatype='integer' name='[drawdown_duration_quarters]' role='measure' type='quantitative' />
+      <column caption='Macro Shock' datatype='string' name='[macro_shock_label]' role='dimension' type='nominal' />
+    </datasource>
+
+    <!-- DS 5: Volatility (H3) -->
+    <datasource caption='KPI Volatility' inline='true' name='kpi_volatility'>
+      <connection class='hyper' dbname='__HYPER_DIR__/kpi_volatility.hyper'
+                  schema='Extract' tablename='kpi_volatility'>
+        <relation name='Extract' table='[Extract].[kpi_volatility]' type='table' />
+      </connection>
+      <column caption='Region' datatype='string' name='[region]' role='dimension' type='nominal' />
+      <column caption='Quarter' datatype='string' name='[quarter_id]' role='dimension' type='nominal' />
+      <column caption='Year' datatype='integer' name='[year_sale]' role='dimension' type='quantitative' />
+      <column caption='Quarter Num' datatype='integer' name='[quarter_num]' role='dimension' type='quantitative' />
+      <column caption='Rolling 4Q Std Dev' datatype='real' name='[rolling_4q_std]' role='measure' type='quantitative' />
+      <column caption='Rolling 8Q Std Dev' datatype='real' name='[rolling_8q_std]' role='measure' type='quantitative' />
+    </datasource>
+
+    <!-- DS 6: Silver Sample (Explorer drill-down) -->
+    <datasource caption='Silver Sample' inline='true' name='silver_sample'>
+      <connection class='hyper' dbname='__HYPER_DIR__/silver_sample.hyper'
+                  schema='Extract' tablename='silver_sample'>
+        <relation name='Extract' table='[Extract].[silver_sample]' type='table' />
+      </connection>
+      <column caption='Region' datatype='string' name='[region]' role='dimension' type='nominal' />
+      <column caption='House Type' datatype='string' name='[house_type]' role='dimension' type='nominal' />
+      <column caption='Sales Type' datatype='string' name='[sales_type]' role='dimension' type='nominal' />
+      <column caption='Year Sale' datatype='integer' name='[year_sale]' role='dimension' type='quantitative' />
+      <column caption='Quarter' datatype='string' name='[quarter_id]' role='dimension' type='nominal' />
+      <column caption='Zip Code' datatype='string' name='[zip_code]' role='dimension' type='nominal' />
+      <column caption='Year Build' datatype='integer' name='[year_build]' role='dimension' type='quantitative' />
+      <column caption='SQM' datatype='real' name='[sqm]' role='measure' type='quantitative' />
+      <column caption='No Rooms' datatype='integer' name='[no_rooms]' role='dimension' type='quantitative' />
+      <column caption='Purchase Price' datatype='real' name='[purchase_price]' role='measure' type='quantitative' />
+      <column caption='SQM Price' datatype='real' name='[sqm_price]' role='measure' type='quantitative' />
+      <column caption='Real SQM Price' datatype='real' name='[real_sqm_price]' role='measure' type='quantitative' />
+    </datasource>
+
+  </datasources>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       WORKSHEETS — 4 hypothesis sheets
+       ══════════════════════════════════════════════════════════════ -->
+  <worksheets>
+
+    <!-- Sheet 1: H1 Elasticidad Crédito -->
+    <worksheet name='H1 Elasticidad Credito'>
+      <table>
+        <view>
+          <datasources>
+            <datasource caption='KPI Transaction Volume' name='kpi_transaction_volume' />
+            <datasource caption='KPI Bond Elasticity' name='kpi_bond_elasticity' />
+          </datasources>
+          <aggregation value='true' />
+        </view>
+        <style />
+        <panes>
+          <pane selection-relaxation-option='selection-relaxation-allow'>
+            <view>
+              <breakdown value='auto' />
+            </view>
+          </pane>
+        </panes>
+        <rows>[kpi_transaction_volume].[none:n_transactions:qk]</rows>
+        <cols>[kpi_transaction_volume].[none:quarter_id:nk]</cols>
+      </table>
+    </worksheet>
+
+    <!-- Sheet 2: H2 Divergencia Regional -->
+    <worksheet name='H2 Divergencia Regional'>
+      <table>
+        <view>
+          <datasources>
+            <datasource caption='KPI SQM Price Index' name='kpi_sqm_price_index' />
+          </datasources>
+          <aggregation value='true' />
+        </view>
+        <style />
+        <panes>
+          <pane selection-relaxation-option='selection-relaxation-allow'>
+            <view>
+              <breakdown value='auto' />
+            </view>
+          </pane>
+        </panes>
+        <rows>[kpi_sqm_price_index].[none:price_index:qk]</rows>
+        <cols>[kpi_sqm_price_index].[none:quarter_id:nk]</cols>
+      </table>
+    </worksheet>
+
+    <!-- Sheet 3: H3 Resiliencia Tipología -->
+    <worksheet name='H3 Resiliencia Tipologia'>
+      <table>
+        <view>
+          <datasources>
+            <datasource caption='KPI Drawdown' name='kpi_drawdown' />
+            <datasource caption='KPI Volatility' name='kpi_volatility' />
+          </datasources>
+          <aggregation value='true' />
+        </view>
+        <style />
+        <panes>
+          <pane selection-relaxation-option='selection-relaxation-allow'>
+            <view>
+              <breakdown value='auto' />
+            </view>
+          </pane>
+        </panes>
+        <rows>[kpi_volatility].[none:rolling_4q_std:qk]</rows>
+        <cols>[kpi_volatility].[none:quarter_id:nk]</cols>
+      </table>
+    </worksheet>
+
+    <!-- Sheet 4: Explorer Drill-Down -->
+    <worksheet name='Explorer Drill-Down'>
+      <table>
+        <view>
+          <datasources>
+            <datasource caption='Silver Sample' name='silver_sample' />
+          </datasources>
+          <aggregation value='true' />
+        </view>
+        <style />
+        <panes>
+          <pane selection-relaxation-option='selection-relaxation-allow'>
+            <view>
+              <breakdown value='auto' />
+            </view>
+          </pane>
+        </panes>
+        <rows>[silver_sample].[none:real_sqm_price:qk]</rows>
+        <cols>[silver_sample].[none:quarter_id:nk]</cols>
+      </table>
+    </worksheet>
+
+  </worksheets>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       DASHBOARD — combines all 4 hypothesis sheets
+       ══════════════════════════════════════════════════════════════ -->
+  <dashboards>
+    <dashboard name='DK Housing Hypotheses'>
+      <style />
+      <size maxheight='1100' maxwidth='1600' minheight='800' minwidth='1200' />
+      <zones>
+        <zone h='100000' id='1' type-v2='layout-basic' w='100000' x='0' y='0'>
+          <zone h='50000' id='2' name='H1 Elasticidad Credito' type-v2='worksheet' w='50000' x='0' y='0' />
+          <zone h='50000' id='3' name='H2 Divergencia Regional' type-v2='worksheet' w='50000' x='50000' y='0' />
+          <zone h='50000' id='4' name='H3 Resiliencia Tipologia' type-v2='worksheet' w='50000' x='0' y='50000' />
+          <zone h='50000' id='5' name='Explorer Drill-Down' type-v2='worksheet' w='50000' x='50000' y='50000' />
+        </zone>
+      </zones>
+    </dashboard>
+  </dashboards>
+
+</workbook>
