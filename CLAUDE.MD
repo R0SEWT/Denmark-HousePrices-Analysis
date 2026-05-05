@@ -55,17 +55,40 @@ Academic data-science project (Spanish-language) analyzing Danish residential ho
 
 Notebooks, comments, docstrings, and printed output are in Spanish — preserve that when editing.
 
+## Unified data flow
+
+Both pipelines share Bronze as the canonical clean layer:
+
+```
+data/raw/DKHousingPrices.parquet
+  └─► make bronze  → data/bronze/transactions.parquet
+        ├─► ML Pipeline (notebook 03): reads Bronze via ML_INPUT_FILE
+        │     → feature_engineering → data/processed/ → H2O XGBoost (notebook 04)
+        └─► Analytics Pipeline (make silver gold tableau)
+              → Silver → Gold (5 KPIs) → Hyper → Tableau Dashboard
+```
+
+Run `make all` for the full medallion pipeline. Run `make ml-pipeline` to prepare Bronze for notebook 03.
+
 ## Notebook workflow
 
-The canonical pipeline is the numbered notebook sequence under `notebooks/` — they are meant to run in order and share intermediate artifacts via files in `data/processed/`:
+Two notebook sequences share the same Bronze clean layer:
 
+**ML Pipeline** (notebooks 00–05):
 ```
 00_extraccion_de_datos     → kaggle download → data/raw/
 01_exploracion_eda         → EDA on raw data
 02_analisis_descriptivo    → univariate/bivariate descriptive stats
-03_feature_engineering     → produces processed_data.parquet, train/test splits, scalers.pkl, feature_metadata.json
+03_feature_engineering     → reads Bronze → processed_data.parquet, train/test splits
 04_modelado_supervisado    → H2O + Optuna + XGBoost (GPU)
 05_resultados_finales      → evaluation, SHAP, comparison tables
+```
+
+**Medallion Observability** (notebooks 06–08):
+```
+06_bronze_quality          → validates Bronze layer output
+07_silver_quality          → visualizes Silver enrichments (CPI, geo, STL)
+08_gold_kpis               → renders 5 Gold KPIs with macro shock annotations
 ```
 
 Every notebook starts with:
@@ -75,21 +98,22 @@ set_project_root()
 ```
 `notebooks/setup.py` chdirs to the project root and appends `src/` to `sys.path`, so notebooks import as `from analysis import ...` or `import config` rather than `from src.analysis`. Keep this pattern when adding notebooks.
 
-`environment.yml` and `run_all.sh` are empty placeholders — do not treat them as authoritative.
-
 ## Code layout (`src/`)
 
-Two sub-packages with different roles:
+Three sub-packages:
 
-- **`src/analysis/`** — EDA/visualization helpers. `src/__init__.py` does `from .utils import *` and `from .analysis import *`, and `src/utils.py` re-exports from every submodule of `analysis/`. This is a facade pattern: downstream code calls `utils.run_complete_analysis(df)` / `utils.enhanced_univariate_analysis(df, col, kind)` without caring which submodule defines what. When adding an EDA function, put it in the right submodule (`data_quality`, `univariate_analysis`, `enhanced_analysis`, `visualization`, `summary_analysis`) and export it from that submodule's `__all__`/top level so the star-import in `src/utils.py` picks it up.
-- **`src/features/`** — feature-engineering building blocks (`temporal_features`, `categorical_features`, `geospatial_features`, `derived_features`). These are imported explicitly from the FE notebook; they are **not** re-exported through `src/utils.py`.
+- **`src/analysis/`** — EDA/visualization helpers. `src/utils.py` re-exports from every submodule (`data_quality`, `univariate_analysis`, `enhanced_analysis`, `visualization`, `summary_analysis`). Downstream code calls `utils.run_complete_analysis(df)` without caring which submodule defines what. When adding an EDA function, put it in the right submodule and export from its top level so the star-import in `src/utils.py` picks it up.
+- **`src/medallion/`** — Bronze → Silver → Gold pipeline (`bronze.py`, `silver.py`, `gold.py`, `deflation.py`, `geo.py`, `stl.py`, `metadata.py`). Tested by `tests/test_bronze.py`, `test_silver.py`, `test_gold.py`.
+- **`src/tableau/`** — Tableau integration (`hyper_writer.py`, `publish.py`, `workbook.py`). Converts Gold KPIs to `.hyper` extracts and publishes to Tableau Server.
+- **`src/features/`** — Only `derived_features.py` remains (size-derived features). Other stubs were removed as dead code.
 
-`src/config.py` is the single source of truth for paths, target column, and training hyperparameters. Two things to watch:
+`src/config.py` is the single source of truth for paths, target column, and training hyperparameters. Key points:
 
 - `TARGET` is defined twice — first as `"purchase_price"` (raw), then overwritten to `"log_price"` (the log-transformed target used by modeling from notebook 03 onward). If you need the raw target, reference it explicitly rather than reading `TARGET`.
-- Paths come in local (`DATA_DIR = PROJECT_ROOT/"data"`) and distributed (`DISTRIBUTED_DIR = /mnt/sambashare/BigData-DATA/data`) variants. `ISDISTRIBUTED=True` by default selects the Samba-mounted path, which is how the two-node H2O cluster shares data. On a single machine without the mount, switch to the local paths or set `ISDISTRIBUTED=False`.
+- `ML_INPUT_FILE` points to `data/bronze/transactions.parquet` — the canonical clean source for the ML pipeline.
+- Paths come in local (`DATA_DIR`) and distributed (`DISTRIBUTED_DIR`) variants. `ISDISTRIBUTED=True` by default selects the Samba-mounted path for the H2O cluster.
 
-`src/descriptive_analysis.py` and `src/feature_engineering.py` at the top level are large legacy modules that predate the `analysis/` and `features/` packages; prefer the modular versions for new work.
+`src/descriptive_analysis.py` and `src/feature_engineering.py` are legacy monolith modules used by notebooks 01–03. They work and are frozen — prefer the modular packages for new work.
 
 ## Modeling conventions
 

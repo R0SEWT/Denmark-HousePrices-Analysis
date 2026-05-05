@@ -1624,7 +1624,7 @@ def prepare_final_dataset(df: pd.DataFrame, target_col: str = MODEL_TARGET_COL) 
     for col in df_modeling.columns:
         if col == target_col:
             continue
-        if np.issubdtype(df_modeling[col].dtype, np.number):
+        if pd.api.types.is_numeric_dtype(df_modeling[col]):
             if np.isinf(df_modeling[col]).any():
                 df_modeling[col] = df_modeling[col].replace([np.inf, -np.inf], np.nan)
 
@@ -2174,62 +2174,18 @@ def clean_duplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
     
     return df
 
-def add_geographic_enrichment(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Aplica enriquecimiento geográfico usando el módulo geospatial_features.
-    
-    Args:
-        df: DataFrame con datos de propiedades
-        
-    Returns:
-        DataFrame enriquecido con características geográficas
-    """
-    from .features.geospatial_features import add_geospatial_features, create_geographic_clusters
-    
-    print("Aplicando enriquecimiento geográfico...")
-    
-    # Agregar características geoespaciales
-    df_geo = add_geospatial_features(df)
-    
-    # Crear clusters geográficos
-    df_geo = create_geographic_clusters(df_geo, n_clusters=5)
-    
-    print("Enriquecimiento geográfico completado.")
-    return df_geo
-
-def enhanced_feature_engineering_pipeline(df: pd.DataFrame, 
+def enhanced_feature_engineering_pipeline(df: pd.DataFrame,
                                         target_col: str = 'purchase_price',
-                                        output_dir: str = None,
-                                        include_geographic: bool = True) -> Dict[str, Any]:
+                                        output_dir: str = None) -> Dict[str, Any]:
     """
-    Pipeline de feature engineering mejorado con enriquecimiento geográfico.
-    
+    Pipeline de feature engineering mejorado.
+
     Args:
         df: DataFrame con datos de entrada
         target_col: Variable objetivo
         output_dir: Directorio de salida
-        include_geographic: Si incluir enriquecimiento geográfico
-        
+
     Returns:
         Diccionario con resultados del pipeline
     """
-    # Ejecutar pipeline principal
-    results = run_complete_feature_engineering_pipeline(df, target_col, output_dir)
-    
-    if include_geographic:
-        print("\nAplicando enriquecimiento geográfico...")
-        df_enriched = add_geographic_enrichment(results['final_dataset'])
-        
-        # Actualizar dataset final con características geográficas
-        results['final_dataset'] = df_enriched
-        results['geographic_features'] = ['urban_density', 'distance_to_center', 'location_type', 'transport_access', 'geo_cluster']
-        
-        # Guardar dataset enriquecido
-        if output_dir:
-            output_path = Path(output_dir)
-            enriched_path = output_path / "feature_engineered_with_geography.parquet"
-            df_enriched.to_parquet(enriched_path)
-            results['saved_files']['enriched_geographic'] = enriched_path
-            print(f"Dataset con enriquecimiento geográfico guardado: {enriched_path}")
-    
-    return results
+    return run_complete_feature_engineering_pipeline(df, target_col, output_dir)

@@ -1,4 +1,4 @@
-.PHONY: bronze silver gold tableau all test quality geo-reference clean
+.PHONY: bronze silver gold tableau all test quality geo-reference clean ml-pipeline
 
 PYTHON ?= python
 
@@ -15,6 +15,9 @@ tableau: gold
 	$(PYTHON) pipeline/run_tableau.py
 
 all: bronze silver gold tableau
+
+ml-pipeline: bronze
+	@echo "Bronze listo. Ejecutar notebook 03 para feature engineering."
 
 test:
 	$(PYTHON) -m pytest tests/ -v

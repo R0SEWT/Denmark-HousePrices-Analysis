@@ -13,6 +13,7 @@ dependencies = [
   "seaborn",
   "scipy",
   "pyarrow",
+  "statsmodels",
   "h2o",
   "optuna",
   "scikit-learn",
@@ -23,12 +24,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Herramientas para desarrollo local y ejecución de notebooks
-# (Se instalan con: uv sync --extra dev  |  uv sync --all-extras)
 dev = [
   "pytest",
   "ipykernel",
   "jupyter",
+]
+tableau = [
+  "tableauhyperapi>=0.0.19000",
+  "tableauserverclient>=0.30",
 ]
 
 [tool.pytest.ini_options]

@@ -206,3 +206,10 @@ ROLLING_VOLATILITY_8Q = 8
 BOND_ELASTICITY_LAGS = [0, 1, 2]
 
 DAWA_POSTNUMRE_URL = "https://api.dataforsyningen.dk/postnumre"
+
+# ============================================
+# PUENTE ML ↔ MEDALLION (UNI-01)
+# El pipeline ML consume Bronze como fuente canónica limpia.
+# ============================================
+
+ML_INPUT_FILE = BRONZE_DIR / "transactions.parquet"

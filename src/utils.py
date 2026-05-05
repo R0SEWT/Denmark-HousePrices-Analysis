@@ -228,23 +228,6 @@ def get_preprocessing_recommendations(df):
     return recommendations
 
 
-# Función para generar reporte HTML (placeholder)
-def generate_html_report(df, output_path="analysis_report.html"):
-    """
-    Genera un reporte HTML con el análisis completo
-    
-    Args:
-        df: DataFrame a analizar
-        output_path: Ruta donde guardar el reporte
-        
-    Returns:
-        Ruta del archivo generado
-    """
-    print("Función de generación de reporte HTML en desarrollo...")
-    print("Por ahora, use las funciones individuales para análisis específicos.")
-    return None
-
-
 # Configuración de estilos para matplotlib
 plt.style.use('seaborn-v0_8')
 sns.set_palette("husl")

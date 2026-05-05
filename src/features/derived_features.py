@@ -8,5 +8,5 @@ def create_size_derived_features(df: pd.DataFrame, sqm_col: str = 'sqm', rooms_c
     Crea variables derivadas del tamaño.
     """
     df_result = df.copy()
-    df_result['sqm_per_room'] = df_result[sqm_col] / df_result[rooms_col].replace(0, 1) # Evitar división por cero
+    df_result['sqm_per_room'] = df_result[sqm_col] / df_result[rooms_col].replace(0, 1)
     return df_result
